@@ -1,0 +1,24 @@
+{
+  "name": "ingreen/ai-policies-to-daktela",
+  "description": "Webhook app that downloads policy PDF attachments from Daktela entities.",
+  "type": "project",
+  "license": "proprietary",
+  "autoload": {
+    "psr-4": {
+      "Ingreen\\DaktelaPolicy\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Ingreen\\DaktelaPolicy\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "php tests/run.php"
+  },
+  "require": {
+    "php": ">=8.2",
+    "ext-curl": "*",
+    "ext-json": "*"
+  }
+}
