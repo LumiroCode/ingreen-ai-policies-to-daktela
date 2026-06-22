@@ -2,21 +2,14 @@
 
 declare(strict_types=1);
 
-use Ingreen\DaktelaPolicy\Application\PolicyDownloadService;
-use Ingreen\DaktelaPolicy\Attachment\AttachmentSelector;
-use Ingreen\DaktelaPolicy\Attachment\FileDownloader;
 use Ingreen\DaktelaPolicy\Config\AppConfig;
-use Ingreen\DaktelaPolicy\Daktela\CurlHttpClient;
 use Ingreen\DaktelaPolicy\Daktela\DaktelaClient;
-use Ingreen\DaktelaPolicy\Entity\AttachmentResolverRegistry;
-use Ingreen\DaktelaPolicy\Entity\TicketAttachmentResolver;
-use Ingreen\DaktelaPolicy\Http\Response;
-use Ingreen\DaktelaPolicy\Http\WebhookController;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\Logging\DailyLogPaths;
-use Ingreen\DaktelaPolicy\Storage\LocalPolicyStorage;
+use Ingreen\DaktelaPolicy\PolicyStore;
 use Ingreen\DaktelaPolicy\Support\AppException;
 use Ingreen\DaktelaPolicy\Support\DirectoryPreparer;
+use Ingreen\DaktelaPolicy\WebhookApp;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -34,32 +27,38 @@ try {
     ini_set('log_errors', '1');
     ini_set('error_log', $dailyLogPaths->errorsFile());
     $logger = new AppLogger($dailyLogPaths->logsFile());
-    $daktelaClient = new DaktelaClient($config->daktelaBaseUrl, $config->daktelaApiToken, new CurlHttpClient());
-    $ticketResolver = new TicketAttachmentResolver($daktelaClient, $logger);
-    $service = new PolicyDownloadService(
-        new AttachmentResolverRegistry(['ticket' => $ticketResolver]),
-        new AttachmentSelector(),
-        new FileDownloader($daktelaClient, $config->maxDownloadBytes),
-        new LocalPolicyStorage($config->policyTempDir),
+    $app = new WebhookApp(
+        $config,
+        new DaktelaClient($config->daktelaBaseUrl, $config->daktelaApiToken),
+        new PolicyStore($config->policyTempDir),
         $logger
     );
 
-    $controller = new WebhookController($config->webhookSharedSecret, $service, $logger);
-    $controller->handle($_SERVER['REQUEST_METHOD'] ?? 'GET', getallheaders() ?: [], file_get_contents('php://input') ?: '')->send();
+    sendJson($app->handle($_SERVER['REQUEST_METHOD'] ?? 'GET', getallheaders() ?: [], file_get_contents('php://input') ?: ''));
 } catch (AppException $exception) {
-    (new Response($exception->statusCode(), [
+    sendJson(['status' => $exception->statusCode(), 'body' => [
         'error' => [
             'code' => $exception->errorCode(),
             'message' => $exception->getMessage(),
             'details' => $exception->details(),
         ],
-    ]))->send();
+    ]]);
 } catch (Throwable $exception) {
     $logger->exception($exception);
-    (new Response(500, [
+    sendJson(['status' => 500, 'body' => [
         'error' => [
             'code' => 'internal_error',
             'message' => 'Internal server error.',
         ],
-    ]))->send();
+    ]]);
+}
+
+/**
+ * @param array{status:int,body:array<string,mixed>} $response
+ */
+function sendJson(array $response): void
+{
+    http_response_code($response['status']);
+    header('Content-Type: application/json');
+    echo json_encode($response['body'], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 }

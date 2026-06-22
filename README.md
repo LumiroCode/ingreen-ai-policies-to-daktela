@@ -77,8 +77,18 @@ Only `.gitkeep` files are committed from `var/`; runtime contents are ignored.
 composer test
 ```
 
+## Code Structure
+
+The app is intentionally small:
+
+- `public/index.php` wires configuration, logging, runtime directories, and the app.
+- `src/WebhookApp.php` handles the webhook and the ticket policy download workflow.
+- `src/Daktela/DaktelaClient.php` performs authenticated Daktela JSON and file requests.
+- `src/PolicyStore.php` creates deterministic local PDF filenames and skips duplicates.
+- `src/Config`, `src/Logging`, and `src/Support` contain config loading, daily logs, and directory/error helpers.
+
 ## Current Scope
 
-V1 supports `ticket` only. Additional Daktela entity types should be added by implementing `AttachmentResolverInterface` and registering the resolver in `public/index.php`.
+V1 supports `ticket` only. Add other Daktela entity types inside `WebhookApp` when their attachment shape is known.
 
-The local OpenAPI document exposes `has_attachment` and attachment metadata shapes, but not a dedicated attachment download endpoint. For that reason, the Daktela-specific discovery logic is isolated in `TicketAttachmentResolver`.
+The local OpenAPI document exposes `has_attachment` and attachment metadata shapes, but not a dedicated attachment download endpoint. For that reason, the Daktela-specific discovery logic is kept in `WebhookApp` and can be replaced once the exact endpoint is known.

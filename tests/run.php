@@ -2,48 +2,37 @@
 
 declare(strict_types=1);
 
-use Ingreen\DaktelaPolicy\Application\PolicyDownloadService;
-use Ingreen\DaktelaPolicy\Attachment\AttachmentMetadata;
-use Ingreen\DaktelaPolicy\Attachment\AttachmentSelector;
-use Ingreen\DaktelaPolicy\Attachment\DownloadedFile;
-use Ingreen\DaktelaPolicy\Attachment\FileDownloader;
 use Ingreen\DaktelaPolicy\Config\AppConfig;
 use Ingreen\DaktelaPolicy\Daktela\DaktelaClient;
-use Ingreen\DaktelaPolicy\Daktela\HttpClientInterface;
-use Ingreen\DaktelaPolicy\Daktela\HttpResponse;
-use Ingreen\DaktelaPolicy\Entity\AttachmentResolverRegistry;
-use Ingreen\DaktelaPolicy\Entity\TicketAttachmentResolver;
-use Ingreen\DaktelaPolicy\Http\WebhookController;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\Logging\DailyLogPaths;
-use Ingreen\DaktelaPolicy\Storage\LocalPolicyStorage;
+use Ingreen\DaktelaPolicy\PolicyStore;
+use Ingreen\DaktelaPolicy\WebhookApp;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
-final class FakeHttpClient implements HttpClientInterface
+final class FakeDaktela
 {
     /** @var list<array{method:string,url:string,headers:array<string,string>}> */
     public array $requests = [];
 
     /**
-     * @param array<string, HttpResponse|callable(string, string, array<string, string>): HttpResponse> $routes
+     * @param array<string, array{status:int,headers:array<string,string>,body:string}|callable(string,string,array<string,string>,?string): array{status:int,headers:array<string,string>,body:string}> $routes
      */
     public function __construct(private readonly array $routes)
     {
     }
 
-    public function request(string $method, string $url, array $headers = [], ?string $body = null): HttpResponse
+    /**
+     * @return array{status:int,headers:array<string,string>,body:string}
+     */
+    public function __invoke(string $method, string $url, array $headers, ?string $body = null): array
     {
         $this->requests[] = ['method' => $method, 'url' => $url, 'headers' => $headers];
         $path = parse_url($url, PHP_URL_PATH) ?: '/';
+        $route = $this->routes[$path] ?? ['status' => 404, 'headers' => ['Content-Type' => 'application/json'], 'body' => '{}'];
 
-        if (!isset($this->routes[$path])) {
-            return new HttpResponse(404, ['Content-Type' => 'application/json'], '{}');
-        }
-
-        $route = $this->routes[$path];
-
-        return is_callable($route) ? $route($method, $url, $headers) : $route;
+        return is_callable($route) ? $route($method, $url, $headers, $body) : $route;
     }
 }
 
@@ -80,7 +69,7 @@ function test(string $name, callable $test): void
 function assertSameValue(mixed $expected, mixed $actual, string $message = ''): void
 {
     if ($expected !== $actual) {
-        throw new RuntimeException($message !== '' ? $message : 'Values are not identical. Expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
+        throw new RuntimeException($message !== '' ? $message : 'Expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
     }
 }
 
@@ -91,14 +80,20 @@ function assertTrueValue(bool $value, string $message = ''): void
     }
 }
 
-function jsonResponse(array $payload, int $status = 200): HttpResponse
+/**
+ * @return array{status:int,headers:array<string,string>,body:string}
+ */
+function jsonResponse(array $payload, int $status = 200): array
 {
-    return new HttpResponse($status, ['Content-Type' => 'application/json'], json_encode($payload, JSON_THROW_ON_ERROR));
+    return ['status' => $status, 'headers' => ['Content-Type' => 'application/json'], 'body' => json_encode($payload, JSON_THROW_ON_ERROR)];
 }
 
-function pdfResponse(string $body = "%PDF-1.4\nbody"): HttpResponse
+/**
+ * @return array{status:int,headers:array<string,string>,body:string}
+ */
+function pdfResponse(string $body = "%PDF-1.4\nbody"): array
 {
-    return new HttpResponse(200, ['Content-Type' => 'application/pdf'], $body);
+    return ['status' => 200, 'headers' => ['Content-Type' => 'application/pdf'], 'body' => $body];
 }
 
 function tempDir(): string
@@ -109,105 +104,99 @@ function tempDir(): string
     return $dir;
 }
 
-function makeService(FakeHttpClient $http, string $dir): PolicyDownloadService
+function app(FakeDaktela $fake, string $dir): WebhookApp
 {
-    $logger = new NullLogger();
-    $client = new DaktelaClient('https://daktela.example', 'api-token', $http);
+    $config = new AppConfig('https://daktela.example', 'api-token', 'secret', $dir . '/var', $dir . '/cache', $dir . '/policies', 1_000_000);
 
-    return new PolicyDownloadService(
-        new AttachmentResolverRegistry(['ticket' => new TicketAttachmentResolver($client, $logger)]),
-        new AttachmentSelector(),
-        new FileDownloader($client, 1_000_000),
-        new LocalPolicyStorage($dir),
-        $logger
+    return new WebhookApp(
+        $config,
+        new DaktelaClient($config->daktelaBaseUrl, $config->daktelaApiToken, $fake),
+        new PolicyStore($config->policyTempDir),
+        new NullLogger()
     );
 }
 
 test('webhook rejects missing shared secret', function (): void {
-    $http = new FakeHttpClient([]);
-    $controller = new WebhookController('secret', makeService($http, tempDir()), new NullLogger());
-    $response = $controller->handle('POST', [], '{"entityType":"ticket","entityId":"1"}');
+    $response = app(new FakeDaktela([]), tempDir())->handle('POST', [], '{"entityType":"ticket","entityId":"1"}');
 
-    assertSameValue(401, $response->statusCode);
-    assertSameValue('unauthorized', $response->body['error']['code']);
+    assertSameValue(401, $response['status']);
+    assertSameValue('unauthorized', $response['body']['error']['code']);
 });
 
 test('webhook rejects unsupported entity type', function (): void {
-    $http = new FakeHttpClient([]);
-    $controller = new WebhookController('secret', makeService($http, tempDir()), new NullLogger());
-    $response = $controller->handle('POST', ['X-Webhook-Secret' => 'secret'], '{"entityType":"car","entityId":"1"}');
+    $response = app(new FakeDaktela([]), tempDir())->handle('POST', ['X-Webhook-Secret' => 'secret'], '{"entityType":"car","entityId":"1"}');
 
-    assertSameValue(400, $response->statusCode);
-    assertSameValue('unsupported_entity_type', $response->body['error']['code']);
+    assertSameValue(400, $response['status']);
+    assertSameValue('unsupported_entity_type', $response['body']['error']['code']);
 });
 
-test('ticket resolver handles has_attachment false', function (): void {
-    $http = new FakeHttpClient([
+test('ticket without attachments returns 404', function (): void {
+    $fake = new FakeDaktela([
         '/api/v6/tickets/123' => jsonResponse(['result' => ['name' => '123', 'has_attachment' => false]]),
     ]);
-    $resolver = new TicketAttachmentResolver(new DaktelaClient('https://daktela.example', 'token', $http), new NullLogger());
+    $response = app($fake, tempDir())->handle('POST', ['X-Webhook-Secret' => 'secret'], '{"entityType":"ticket","entityId":"123"}');
 
-    try {
-        $resolver->resolve('123');
-    } catch (Throwable $exception) {
-        assertSameValue('ticket_has_no_attachment', $exception->errorCode());
-        return;
-    }
-
-    throw new RuntimeException('Expected exception.');
+    assertSameValue(404, $response['status']);
+    assertSameValue('ticket_has_no_attachment', $response['body']['error']['code']);
 });
 
-test('attachment selector prefers PDF metadata and policy filename', function (): void {
-    $selector = new AttachmentSelector();
-    $selected = $selector->selectPolicyPdf([
-        new AttachmentMetadata('/files/readme.txt', 'readme.txt', 'text/plain'),
-        new AttachmentMetadata('/files/scan.pdf', 'scan.pdf', null),
-        new AttachmentMetadata('/files/policy.bin', 'policy.pdf', 'application/pdf'),
+test('selector prefers PDF metadata and policy filename', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/readme.txt', 'title' => 'readme.txt', 'type' => 'text/plain'],
+                    ['file' => '/files/scan.pdf', 'title' => 'scan.pdf'],
+                    ['file' => '/files/policy.bin', 'title' => 'policy.pdf', 'type' => 'application/pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/files/policy.bin' => pdfResponse(),
     ]);
 
-    assertSameValue('/files/policy.bin', $selected->file);
+    $response = app($fake, tempDir())->handle('POST', ['X-Webhook-Secret' => 'secret'], '{"entityType":"ticket","entityId":"123"}');
+
+    assertSameValue(200, $response['status']);
+    assertSameValue('/files/policy.bin', $response['body']['result']['attachment']['file']);
 });
 
 test('storage sanitizes filename and skips existing files', function (): void {
-    $dir = tempDir();
-    $storage = new LocalPolicyStorage($dir);
-    $attachment = new AttachmentMetadata('/download/abc', '../Policy 2026.pdf', 'application/pdf');
+    $store = new PolicyStore(tempDir());
+    $attachment = ['file' => '/download/abc', 'title' => '../Policy 2026.pdf', 'type' => 'application/pdf'];
 
-    $stored = $storage->store('ticket', '12/34', $attachment, new DownloadedFile('%PDF-1.4'));
-    $again = $storage->store('ticket', '12/34', $attachment, new DownloadedFile('%PDF-1.4 updated'));
+    $stored = $store->save('ticket', '12/34', $attachment, '%PDF-1.4');
+    $again = $store->save('ticket', '12/34', $attachment, '%PDF-1.4 updated');
 
-    assertSameValue('downloaded', $stored->status);
-    assertSameValue('already_exists', $again->status);
-    assertTrueValue(is_file($stored->path));
-    assertTrueValue(str_contains(basename($stored->path), 'ticket_12_34_Policy_2026.pdf'));
+    assertSameValue('downloaded', $stored['status']);
+    assertSameValue('already_exists', $again['status']);
+    assertTrueValue(is_file($stored['path']));
+    assertTrueValue(str_contains(basename($stored['path']), 'ticket_12_34_Policy_2026.pdf'));
 });
 
 test('downloader handles relative Daktela file path', function (): void {
-    $http = new FakeHttpClient([
-        '/attachments/policy.pdf' => pdfResponse(),
-    ]);
-    $downloader = new FileDownloader(new DaktelaClient('https://daktela.example', 'token', $http), 1_000_000);
-    $file = $downloader->download(new AttachmentMetadata('/attachments/policy.pdf', 'policy.pdf', 'application/pdf'));
+    $fake = new FakeDaktela(['/attachments/policy.pdf' => pdfResponse()]);
+    $client = new DaktelaClient('https://daktela.example', 'token', $fake);
+    $file = $client->download('/attachments/policy.pdf', 1_000_000);
 
-    assertSameValue("%PDF-1.4\nbody", $file->bytes);
-    assertSameValue('https://daktela.example/attachments/policy.pdf', $http->requests[0]['url']);
-    assertSameValue('token', $http->requests[0]['headers']['X-AUTH-TOKEN-OPENAPI']);
+    assertSameValue("%PDF-1.4\nbody", $file['body']);
+    assertSameValue('https://daktela.example/attachments/policy.pdf', $fake->requests[0]['url']);
+    assertSameValue('token', $fake->requests[0]['headers']['X-AUTH-TOKEN-OPENAPI']);
 });
 
 test('daktela 401 maps to upstream auth error', function (): void {
-    $http = new FakeHttpClient([
-        '/api/v6/tickets/123' => jsonResponse([], 401),
-    ]);
-    $controller = new WebhookController('secret', makeService($http, tempDir()), new NullLogger());
-    $response = $controller->handle('POST', ['X-Webhook-Secret' => 'secret'], '{"entityType":"ticket","entityId":"123"}');
+    $fake = new FakeDaktela(['/api/v6/tickets/123' => jsonResponse([], 401)]);
+    $response = app($fake, tempDir())->handle('POST', ['X-Webhook-Secret' => 'secret'], '{"entityType":"ticket","entityId":"123"}');
 
-    assertSameValue(502, $response->statusCode);
-    assertSameValue('daktela_auth_failed', $response->body['error']['code']);
+    assertSameValue(502, $response['status']);
+    assertSameValue('daktela_auth_failed', $response['body']['error']['code']);
 });
 
 test('full mocked ticket download and duplicate idempotency', function (): void {
     $downloadCount = 0;
-    $http = new FakeHttpClient([
+    $fake = new FakeDaktela([
         '/api/v6/tickets/123' => jsonResponse([
             'result' => [
                 'name' => '123',
@@ -218,20 +207,20 @@ test('full mocked ticket download and duplicate idempotency', function (): void 
             ],
         ]),
         '/api/v6/activities' => jsonResponse(['result' => ['data' => []]]),
-        '/files/policy.pdf' => function () use (&$downloadCount): HttpResponse {
+        '/files/policy.pdf' => function () use (&$downloadCount): array {
             $downloadCount++;
             return pdfResponse();
         },
     ]);
-    $controller = new WebhookController('secret', makeService($http, tempDir()), new NullLogger());
+    $app = app($fake, tempDir());
 
-    $first = $controller->handle('POST', ['X-Webhook-Secret' => 'secret'], '{"entityType":"ticket","entityId":"123"}');
-    $second = $controller->handle('POST', ['X-Webhook-Secret' => 'secret'], '{"entityType":"ticket","entityId":"123"}');
+    $first = $app->handle('POST', ['X-Webhook-Secret' => 'secret'], '{"entityType":"ticket","entityId":"123"}');
+    $second = $app->handle('POST', ['X-Webhook-Secret' => 'secret'], '{"entityType":"ticket","entityId":"123"}');
 
-    assertSameValue(200, $first->statusCode);
-    assertSameValue('downloaded', $first->body['result']['status']);
-    assertSameValue(200, $second->statusCode);
-    assertSameValue('already_exists', $second->body['result']['status']);
+    assertSameValue(200, $first['status']);
+    assertSameValue('downloaded', $first['body']['result']['status']);
+    assertSameValue(200, $second['status']);
+    assertSameValue('already_exists', $second['body']['result']['status']);
     assertSameValue(1, $downloadCount);
 });
 
