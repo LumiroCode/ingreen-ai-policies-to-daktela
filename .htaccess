@@ -1,0 +1,22 @@
+DirectoryIndex public/index.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Never serve repository internals or runtime files from the project root.
+    RewriteRule ^(?:\.|composer\.(?:json|lock)|README\.md|config/|credentials/|docs/|scripts/|src/|templates/|tests/|var/|vendor/) - [F,L,NC]
+
+    # Let existing files under public/ be served directly.
+    RewriteCond %{REQUEST_FILENAME} -f
+    RewriteRule ^public/ - [L]
+
+    # Send the root and all application requests to the public front controller.
+    RewriteRule ^$ public/index.php [L]
+    RewriteRule ^(.+)$ public/index.php [L,QSA]
+</IfModule>
+
+<IfModule !mod_rewrite.c>
+    <FilesMatch "^(?:\.|composer\.(?:json|lock)|README\.md)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>

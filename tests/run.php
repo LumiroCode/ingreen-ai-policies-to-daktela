@@ -6,7 +6,7 @@ use Ingreen\DaktelaPolicy\Config\AppConfig;
 use Ingreen\DaktelaPolicy\Daktela\DaktelaClient;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\Logging\DailyLogPaths;
-use Ingreen\DaktelaPolicy\PolicyStore;
+use Ingreen\DaktelaPolicy\TicketPdfAttachments;
 use Ingreen\DaktelaPolicy\WebhookApp;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
@@ -106,43 +106,60 @@ function tempDir(): string
 
 function app(FakeDaktela $fake, string $dir): WebhookApp
 {
-    $config = new AppConfig('https://daktela.example', 'api-token', $dir . '/var', $dir . '/cache', $dir . '/policies', 1_000_000);
+    $config = new AppConfig('https://daktela.example', 'api-token', $dir . '/var', $dir . '/cache', 1_000_000);
 
-    return new WebhookApp(
-        $config,
-        new DaktelaClient($config->daktelaBaseUrl, $config->daktelaApiToken, $fake),
-        new PolicyStore($config->policyTempDir),
-        new NullLogger()
-    );
+    $logger = new NullLogger();
+    $daktela = new DaktelaClient($config->daktelaBaseUrl, $config->daktelaApiToken, $fake);
+
+    return new WebhookApp($config, $daktela, new TicketPdfAttachments($daktela, $logger), $logger);
+}
+
+/**
+ * @param array{status:int,headers:array<string,string>,body:string} $response
+ * @return array<string,mixed>
+ */
+function errorBody(array $response): array
+{
+    $payload = json_decode($response['body'], true);
+
+    if (!is_array($payload)) {
+        throw new RuntimeException('Expected JSON error response.');
+    }
+
+    return $payload;
 }
 
 test('app rejects missing ticket query parameter', function (): void {
-    $response = app(new FakeDaktela([]), tempDir())->handle(null);
+    $response = app(new FakeDaktela([]), tempDir())->handle(null, null);
+    $payload = errorBody($response);
 
     assertSameValue(400, $response['status']);
-    assertSameValue('invalid_request', $response['body']['error']['code']);
-    assertSameValue('ticket', $response['body']['error']['details']['field']);
+    assertSameValue('invalid_request', $payload['error']['code']);
+    assertSameValue('ticket', $payload['error']['details']['field']);
 });
 
 test('app rejects empty ticket query parameter', function (): void {
-    $response = app(new FakeDaktela([]), tempDir())->handle('  ');
+    $response = app(new FakeDaktela([]), tempDir())->handle('  ', null);
+    $payload = errorBody($response);
 
     assertSameValue(400, $response['status']);
-    assertSameValue('invalid_request', $response['body']['error']['code']);
-    assertSameValue('ticket', $response['body']['error']['details']['field']);
+    assertSameValue('invalid_request', $payload['error']['code']);
+    assertSameValue('ticket', $payload['error']['details']['field']);
 });
 
 test('ticket without attachments returns 404', function (): void {
     $fake = new FakeDaktela([
         '/api/v6/tickets/123' => jsonResponse(['result' => ['name' => '123', 'has_attachment' => false]]),
     ]);
-    $response = app($fake, tempDir())->handle('123');
+    $response = app($fake, tempDir())->handle('123', null);
+    $payload = errorBody($response);
 
     assertSameValue(404, $response['status']);
-    assertSameValue('ticket_has_no_attachment', $response['body']['error']['code']);
+    assertSameValue('ticket_has_no_attachment', $payload['error']['code']);
 });
 
-test('selector prefers PDF metadata and policy filename', function (): void {
+test('ticket PDF list renders table and does not download files', function (): void {
+    $downloadCount = 0;
     $fake = new FakeDaktela([
         '/api/v6/tickets/123' => jsonResponse([
             'result' => [
@@ -156,26 +173,24 @@ test('selector prefers PDF metadata and policy filename', function (): void {
             ],
         ]),
         '/api/v6/activities' => jsonResponse(['result' => ['data' => []]]),
-        '/files/policy.bin' => pdfResponse(),
+        '/files/scan.pdf' => function () use (&$downloadCount): array {
+            $downloadCount++;
+            return pdfResponse();
+        },
+        '/files/policy.bin' => function () use (&$downloadCount): array {
+            $downloadCount++;
+            return pdfResponse();
+        },
     ]);
 
-    $response = app($fake, tempDir())->handle('123');
+    $response = app($fake, tempDir())->handle('123', null);
 
     assertSameValue(200, $response['status']);
-    assertSameValue('/files/policy.bin', $response['body']['result']['attachment']['file']);
-});
-
-test('storage sanitizes filename and skips existing files', function (): void {
-    $store = new PolicyStore(tempDir());
-    $attachment = ['file' => '/download/abc', 'title' => '../Policy 2026.pdf', 'type' => 'application/pdf'];
-
-    $stored = $store->save('ticket', '12/34', $attachment, '%PDF-1.4');
-    $again = $store->save('ticket', '12/34', $attachment, '%PDF-1.4 updated');
-
-    assertSameValue('downloaded', $stored['status']);
-    assertSameValue('already_exists', $again['status']);
-    assertTrueValue(is_file($stored['path']));
-    assertTrueValue(str_contains(basename($stored['path']), 'ticket_12_34_Policy_2026.pdf'));
+    assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
+    assertTrueValue(str_contains($response['body'], '<td>scan.pdf</td>'));
+    assertTrueValue(str_contains($response['body'], '<td>policy.pdf</td>'));
+    assertTrueValue(!str_contains($response['body'], 'readme.txt'));
+    assertSameValue(0, $downloadCount);
 });
 
 test('downloader handles relative Daktela file path', function (): void {
@@ -190,40 +205,49 @@ test('downloader handles relative Daktela file path', function (): void {
 
 test('daktela 401 maps to upstream auth error', function (): void {
     $fake = new FakeDaktela(['/api/v6/tickets/123' => jsonResponse([], 401)]);
-    $response = app($fake, tempDir())->handle('123');
+    $response = app($fake, tempDir())->handle('123', null);
+    $payload = errorBody($response);
 
     assertSameValue(502, $response['status']);
-    assertSameValue('daktela_auth_failed', $response['body']['error']['code']);
+    assertSameValue('daktela_auth_failed', $payload['error']['code']);
 });
 
-test('full mocked ticket download and duplicate idempotency', function (): void {
-    $downloadCount = 0;
+test('selected PDF attachment is downloaded only after clicking read', function (): void {
+    $downloads = [];
     $fake = new FakeDaktela([
         '/api/v6/tickets/123' => jsonResponse([
             'result' => [
                 'name' => '123',
                 'has_attachment' => true,
                 'attachments' => [
-                    ['file' => '/files/policy.pdf', 'title' => 'policy.pdf', 'type' => 'application/pdf'],
+                    ['file' => '/files/first.pdf', 'title' => 'first.pdf', 'type' => 'application/pdf'],
+                    ['file' => '/files/second.pdf', 'title' => 'second.pdf', 'type' => 'application/pdf'],
                 ],
             ],
         ]),
         '/api/v6/activities' => jsonResponse(['result' => ['data' => []]]),
-        '/files/policy.pdf' => function () use (&$downloadCount): array {
-            $downloadCount++;
-            return pdfResponse();
+        '/files/first.pdf' => function () use (&$downloads): array {
+            $downloads[] = 'first';
+            return pdfResponse("%PDF-1.4\nfirst");
+        },
+        '/files/second.pdf' => function () use (&$downloads): array {
+            $downloads[] = 'second';
+            return pdfResponse("%PDF-1.4\nsecond");
         },
     ]);
     $app = app($fake, tempDir());
 
-    $first = $app->handle('123');
-    $second = $app->handle('123');
+    $list = $app->handle('123', null);
 
-    assertSameValue(200, $first['status']);
-    assertSameValue('downloaded', $first['body']['result']['status']);
-    assertSameValue(200, $second['status']);
-    assertSameValue('already_exists', $second['body']['result']['status']);
-    assertSameValue(1, $downloadCount);
+    assertSameValue(200, $list['status']);
+    assertSameValue([], $downloads);
+
+    $download = $app->handle('123', '1');
+
+    assertSameValue(200, $download['status']);
+    assertSameValue('application/pdf', $download['headers']['Content-Type']);
+    assertSameValue("%PDF-1.4\nsecond", $download['body']);
+    assertSameValue(['second'], $downloads);
 });
 
 test('app config loads from PHP config files', function (): void {
@@ -237,7 +261,6 @@ return [
     'daktelaBaseUrl' => 'https://daktela.example/',
     'varDir' => '/tmp/app-var',
     'cacheDir' => '/tmp/cache',
-    'policyTempDir' => '/tmp/policies',
     'maxDownloadBytes' => '12345',
 ];
 PHP);
@@ -253,7 +276,6 @@ PHP);
     assertSameValue('token-from-file', $config->daktelaApiToken);
     assertSameValue('/tmp/app-var', $config->varDir);
     assertSameValue('/tmp/cache', $config->cacheDir);
-    assertSameValue('/tmp/policies', $config->policyTempDir);
     assertSameValue(12345, $config->maxDownloadBytes);
 });
 
@@ -267,7 +289,6 @@ return [
     'daktelaBaseUrl' => 'https://daktela.example',
     'varDir' => '/tmp/app-var',
     'cacheDir' => '/tmp/cache',
-    'policyTempDir' => '/tmp/policies',
 ];
 PHP);
 

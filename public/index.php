@@ -6,9 +6,9 @@ use Ingreen\DaktelaPolicy\Config\AppConfig;
 use Ingreen\DaktelaPolicy\Daktela\DaktelaClient;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\Logging\DailyLogPaths;
-use Ingreen\DaktelaPolicy\PolicyStore;
 use Ingreen\DaktelaPolicy\Support\AppException;
 use Ingreen\DaktelaPolicy\Support\DirectoryPreparer;
+use Ingreen\DaktelaPolicy\TicketPdfAttachments;
 use Ingreen\DaktelaPolicy\WebhookApp;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
@@ -22,19 +22,19 @@ try {
         $config->varDir,
         $dailyLogPaths->directory(),
         $config->cacheDir,
-        $config->policyTempDir,
     ]);
     ini_set('log_errors', '1');
     ini_set('error_log', $dailyLogPaths->errorsFile());
     $logger = new AppLogger($dailyLogPaths->logsFile());
+    $daktela = new DaktelaClient($config->daktelaBaseUrl, $config->daktelaApiToken);
     $app = new WebhookApp(
         $config,
-        new DaktelaClient($config->daktelaBaseUrl, $config->daktelaApiToken),
-        new PolicyStore($config->policyTempDir),
+        $daktela,
+        new TicketPdfAttachments($daktela, $logger),
         $logger
     );
 
-    sendJson($app->handle($_GET['ticket'] ?? null));
+    sendResponse($app->handle($_GET['ticket'] ?? null, $_GET['attachment'] ?? null));
 } catch (AppException $exception) {
     sendJson(['status' => $exception->statusCode(), 'body' => [
         'error' => [
@@ -51,6 +51,20 @@ try {
             'message' => 'Internal server error.',
         ],
     ]]);
+}
+
+/**
+ * @param array{status:int,headers:array<string,string>,body:string} $response
+ */
+function sendResponse(array $response): void
+{
+    http_response_code($response['status']);
+
+    foreach ($response['headers'] as $name => $value) {
+        header($name . ': ' . $value);
+    }
+
+    echo $response['body'];
 }
 
 /**

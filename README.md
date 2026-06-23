@@ -1,6 +1,6 @@
 # Daktela Policy Attachment Downloader
 
-Small plain PHP app that accepts a Daktela ticket id from the `ticket` query parameter, resolves a ticket policy PDF attachment, downloads it from Daktela, and stores it in a local flat temp directory.
+Small plain PHP app that accepts a Daktela ticket id from the `ticket` query parameter, lists related PDF attachments, and downloads a selected attachment from Daktela only when the user clicks `odczytaj`.
 
 ## Requirements
 
@@ -25,7 +25,6 @@ return [
     'daktelaBaseUrl' => 'https://your-daktela-instance.example',
     'varDir' => __DIR__ . '/../var',
     'cacheDir' => __DIR__ . '/../var/cache',
-    'policyTempDir' => __DIR__ . '/../var/cache/policies',
     'maxDownloadBytes' => 25_000_000,
 ];
 ```
@@ -54,7 +53,7 @@ Smoke test:
 curl 'http://127.0.0.1:8080?ticket=123'
 ```
 
-Successful responses return `status` as `downloaded` or `already_exists` and include the local `path`.
+The ticket URL returns an HTML table with PDF attachments. The `odczytaj` button requests the selected attachment and returns it inline as `application/pdf`.
 
 ## Runtime Files
 
@@ -63,7 +62,6 @@ The app owns a local `var/` directory:
 - `var/YYYY-MM-DD/YYYY-MM-DD.log` stores JSON-line application logs.
 - `var/YYYY-MM-DD/YYYY-MM-DD.errors.log` stores PHP engine errors.
 - `var/cache/` is reserved for cache data.
-- `var/cache/policies/` stores downloaded PDFs by default.
 
 Only `.gitkeep` files are committed from `var/`; runtime contents are ignored.
 
@@ -79,8 +77,9 @@ The app is intentionally small:
 
 - `public/index.php` wires configuration, logging, runtime directories, and the app.
 - `src/WebhookApp.php` handles the ticket query parameter and the ticket policy download workflow.
+- `src/TicketPdfAttachments.php` resolves PDF attachments related to a Daktela ticket.
 - `src/Daktela/DaktelaClient.php` performs authenticated Daktela JSON and file requests.
-- `src/PolicyStore.php` creates deterministic local PDF filenames and skips duplicates.
+- `templates/pdf-attachments-table.php` renders the attachment list.
 - `src/Config`, `src/Logging`, and `src/Support` contain config loading, daily logs, and directory/error helpers.
 
 ## Current Scope

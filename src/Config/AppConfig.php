@@ -17,7 +17,6 @@ final class AppConfig
         public readonly string $daktelaApiToken,
         public readonly string $varDir,
         public readonly string $cacheDir,
-        public readonly string $policyTempDir,
         public readonly int $maxDownloadBytes = self::DEFAULT_MAX_DOWNLOAD_BYTES
     ) {
     }
@@ -34,7 +33,6 @@ final class AppConfig
             self::tokenFromCredentialsFile($credentialsPath),
             self::requiredString($settings, 'varDir', $appConfigPath),
             self::requiredString($settings, 'cacheDir', $appConfigPath),
-            self::requiredString($settings, 'policyTempDir', $appConfigPath),
             isset($settings['maxDownloadBytes'])
                 ? self::positiveInt($settings['maxDownloadBytes'], 'maxDownloadBytes', $appConfigPath)
                 : self::DEFAULT_MAX_DOWNLOAD_BYTES
