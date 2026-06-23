@@ -6,6 +6,7 @@ declare(strict_types=1);
  * @var list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
  * @var string $accessToken
  * @var string $ticketId
+ * @var array{type:string,text:string}|null $message
  */
 
 ?>
@@ -39,6 +40,24 @@ declare(strict_types=1);
         button {
             cursor: default;
             padding: 6px 12px;
+        }
+
+        .message {
+            margin-top: 12px;
+            padding: 10px 12px;
+            max-width: 560px;
+        }
+
+        .message.success {
+            background: #edf7ed;
+            border: 1px solid #8bc58b;
+            color: #1f5b1f;
+        }
+
+        .message.error {
+            background: #fdecec;
+            border: 1px solid #d98a8a;
+            color: #7a1f1f;
         }
     </style>
 </head>
@@ -74,5 +93,10 @@ declare(strict_types=1);
             <?php endforeach; ?>
         </tbody>
     </table>
+    <?php if ($message !== null): ?>
+        <div class="message <?= htmlspecialchars($message['type'], ENT_QUOTES, 'UTF-8') ?>">
+            <?= htmlspecialchars($message['text'], ENT_QUOTES, 'UTF-8') ?>
+        </div>
+    <?php endif; ?>
 </body>
 </html>

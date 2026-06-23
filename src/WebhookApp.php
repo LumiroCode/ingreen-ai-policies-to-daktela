@@ -95,38 +95,104 @@ final class WebhookApp
     private function downloadSelectedTicketPdf(string $ticketId, string $attachmentIndex, string $requestId): array
     {
         $attachments = $this->ticketPdfAttachments->forTicket($ticketId);
-        $attachment = $this->ticketPdfAttachments->byIndex($attachments, $attachmentIndex);
-        $download = $this->daktela->download($attachment['file'], $this->config->maxDownloadBytes);
 
-        if (!$this->looksLikePdf($download['body'], $download['contentType'], $attachment)) {
-            throw new AppException(422, 'attachment_is_not_pdf', 'Downloaded attachment does not look like a PDF.', [
-                'file' => $attachment['file'],
-                'contentType' => $download['contentType'],
-                'attachmentType' => $attachment['type'] ?? null,
+        try {
+            $attachment = $this->ticketPdfAttachments->byIndex($attachments, $attachmentIndex);
+            $download = $this->daktela->download($attachment['file'], $this->config->maxDownloadBytes);
+
+            if (!$this->looksLikePdf($download['body'], $download['contentType'], $attachment)) {
+                throw new AppException(422, 'attachment_is_not_pdf', 'Downloaded attachment does not look like a PDF.', [
+                    'file' => $attachment['file'],
+                    'contentType' => $download['contentType'],
+                    'attachmentType' => $attachment['type'] ?? null,
+                ]);
+            }
+
+            $path = $this->storeTemporaryPolicyFile($attachment, $attachmentIndex, $download['body']);
+
+            $this->logger->info('Policy attachment stored for Claude extraction.', [
+                'requestId' => $requestId,
+                'entityType' => 'ticket',
+                'entityId' => $ticketId,
+                'attachmentFile' => $attachment['file'],
+                'storedPath' => $path,
+            ]);
+
+            return [
+                'status' => 200,
+                'headers' => $this->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
+                'body' => $this->renderPdfAttachmentsTable($ticketId, $attachments, [
+                    'type' => 'success',
+                    'text' => 'Plik polisy został zapisany tymczasowo.',
+                ]),
+            ];
+        } catch (AppException $exception) {
+            $this->logger->warning('Policy attachment could not be stored.', [
+                'requestId' => $requestId,
+                'entityType' => 'ticket',
+                'entityId' => $ticketId,
+                'errorCode' => $exception->errorCode(),
+                'details' => $exception->details(),
+            ]);
+
+            return [
+                'status' => $exception->statusCode(),
+                'headers' => $this->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
+                'body' => $this->renderPdfAttachmentsTable($ticketId, $attachments, [
+                    'type' => 'error',
+                    'text' => 'Nie udało się zapisać pliku polisy. Spróbuj ponownie.',
+                ]),
+            ];
+        }
+    }
+
+    /**
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     */
+    private function storeTemporaryPolicyFile(array $attachment, string $attachmentIndex, string $body): string
+    {
+        $directory = rtrim($this->config->varDir, '/\\') . '/tmp/policies';
+
+        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+            throw new AppException(500, 'policy_temp_dir_failed', 'Could not create temporary policy directory.', [
+                'directory' => $directory,
             ]);
         }
 
-        $this->logger->info('Policy attachment downloaded for reading.', [
-            'requestId' => $requestId,
-            'entityType' => 'ticket',
-            'entityId' => $ticketId,
-            'attachmentFile' => $attachment['file'],
-        ]);
+        $path = $directory . '/' . $this->temporaryPolicyFilename($attachment, $attachmentIndex);
 
-        return [
-            'status' => 200,
-            'headers' => $this->securityHeaders([
-                'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'inline; filename="' . $this->downloadFilename($attachment) . '"',
-            ]),
-            'body' => $download['body'],
-        ];
+        if (file_put_contents($path, $body, LOCK_EX) === false) {
+            throw new AppException(500, 'policy_temp_write_failed', 'Could not write temporary policy file.', [
+                'path' => $path,
+            ]);
+        }
+
+        return $path;
+    }
+
+    /**
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     */
+    private function temporaryPolicyFilename(array $attachment, string $attachmentIndex): string
+    {
+        $id = $attachment['id'] ?? $attachment['name'] ?? null;
+
+        if ($id === null && ctype_digit($attachment['file'])) {
+            $id = $attachment['file'];
+        }
+
+        $id = preg_replace('/[^A-Za-z0-9._-]+/', '_', (string) ($id ?? 'attachment-' . $attachmentIndex));
+        $id = trim((string) $id, '._-');
+
+        $filename = $id !== '' ? $id : 'attachment-' . $attachmentIndex;
+
+        return str_ends_with(strtolower($filename), '.pdf') ? $filename : $filename . '.pdf';
     }
 
     /**
      * @param list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
      */
-    private function renderPdfAttachmentsTable(string $ticketId, array $attachments): string
+    private function renderPdfAttachmentsTable(string $ticketId, array $attachments, ?array $message = null): string
     {
         $accessToken = $this->accessTokenForTicket($ticketId);
         ob_start();

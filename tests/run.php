@@ -284,6 +284,7 @@ test('ticket PDF list includes activity attachment with numeric file id', functi
 });
 
 test('selected email activity attachment downloads through Daktela file mapper', function (): void {
+    $dir = tempDir();
     $fake = new FakeDaktela([
         '/api/v6/tickets/15242' => jsonResponse([
             'result' => [
@@ -310,7 +311,7 @@ test('selected email activity attachment downloads through Daktela file mapper',
         ]),
         '/file/download.php' => pdfResponse("%PDF-1.4\nmapped"),
     ]);
-    $app = app($fake, tempDir());
+    $app = app($fake, $dir);
 
     $download = $app->handle('15242', '0');
     $request = $fake->requests[2];
@@ -322,9 +323,11 @@ test('selected email activity attachment downloads through Daktela file mapper',
     assertSameValue('35869', $query['name']);
     assertSameValue('Polisa_904001145228.pdf', $query['iconHash']);
     assertSameValue('1', $query['download']);
+    assertSameValue("%PDF-1.4\nmapped", file_get_contents($dir . '/var/tmp/policies/35869.pdf'));
 });
 
 test('selected activity comment attachment downloads through activities comment mapper', function (): void {
+    $dir = tempDir();
     $fake = new FakeDaktela([
         '/api/v6/tickets/15242' => jsonResponse([
             'result' => [
@@ -351,13 +354,14 @@ test('selected activity comment attachment downloads through activities comment 
         ]),
         '/file/download.php' => pdfResponse("%PDF-1.4\ncomment"),
     ]);
-    $app = app($fake, tempDir());
+    $app = app($fake, $dir);
 
     $download = $app->handle('15242', '0');
     $request = $fake->requests[2];
 
     assertSameValue(200, $download['status']);
     assertSameValue('https://daktela.example/file/download.php?mapper=activitiesComment&name=2023&iconHash=Faktura+FV+9_4_2026.pdf&download=1', $request['url']);
+    assertSameValue("%PDF-1.4\ncomment", file_get_contents($dir . '/var/tmp/policies/2023.pdf'));
 });
 
 test('ticket PDF list includes PDFs from nested activity item attachments', function (): void {
@@ -425,6 +429,7 @@ test('configured utility origin allows Daktela referrer and sets frame policy', 
 });
 
 test('configured utility origin allows signed in-app attachment request', function (): void {
+    $dir = tempDir();
     $fake = new FakeDaktela([
         '/api/v6/tickets/123' => jsonResponse([
             'result' => [
@@ -438,12 +443,14 @@ test('configured utility origin allows signed in-app attachment request', functi
         '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
         '/files/scan.pdf' => pdfResponse(),
     ]);
-    $app = app($fake, tempDir(), 'https://ingreen.daktela.com');
+    $app = app($fake, $dir, 'https://ingreen.daktela.com');
     $list = $app->handle('123', null, null, null, 'https://ingreen.daktela.com/tickets/123');
     $download = $app->handle('123', '0', accessTokenFromHtml($list['body']), null, 'https://app.example/?ticket=123');
 
     assertSameValue(200, $download['status']);
-    assertSameValue('application/pdf', $download['headers']['Content-Type']);
+    assertSameValue('text/html; charset=UTF-8', $download['headers']['Content-Type']);
+    assertTrueValue(str_contains($download['body'], 'Plik polisy został zapisany tymczasowo.'));
+    assertSameValue("%PDF-1.4\nbody", file_get_contents($dir . '/var/tmp/policies/files_scan.pdf'));
 });
 
 test('configured utility key rejects entry requests without the key', function (): void {
@@ -505,7 +512,8 @@ test('daktela 401 maps to upstream auth error', function (): void {
     assertSameValue('daktela_auth_failed', $payload['error']['code']);
 });
 
-test('selected PDF attachment is downloaded only after clicking read', function (): void {
+test('selected PDF attachment is stored only after clicking read', function (): void {
+    $dir = tempDir();
     $downloads = [];
     $fake = new FakeDaktela([
         '/api/v6/tickets/123' => jsonResponse([
@@ -514,7 +522,7 @@ test('selected PDF attachment is downloaded only after clicking read', function 
                 'has_attachment' => true,
                 'attachments' => [
                     ['file' => '/files/first.pdf', 'title' => 'first.pdf', 'type' => 'application/pdf'],
-                    ['file' => '/files/second.pdf', 'title' => 'second.pdf', 'type' => 'application/pdf'],
+                    ['id' => 'policy-456', 'file' => '/files/second.pdf', 'title' => 'second.pdf', 'type' => 'application/pdf'],
                 ],
             ],
         ]),
@@ -528,19 +536,44 @@ test('selected PDF attachment is downloaded only after clicking read', function 
             return pdfResponse("%PDF-1.4\nsecond");
         },
     ]);
-    $app = app($fake, tempDir());
+    $app = app($fake, $dir);
 
     $list = $app->handle('123', null);
 
     assertSameValue(200, $list['status']);
     assertSameValue([], $downloads);
+    assertTrueValue(!is_file($dir . '/var/tmp/policies/policy-456.pdf'));
 
     $download = $app->handle('123', '1');
 
     assertSameValue(200, $download['status']);
-    assertSameValue('application/pdf', $download['headers']['Content-Type']);
-    assertSameValue("%PDF-1.4\nsecond", $download['body']);
+    assertSameValue('text/html; charset=UTF-8', $download['headers']['Content-Type']);
+    assertTrueValue(str_contains($download['body'], 'Plik polisy został zapisany tymczasowo.'));
+    assertSameValue("%PDF-1.4\nsecond", file_get_contents($dir . '/var/tmp/policies/policy-456.pdf'));
     assertSameValue(['second'], $downloads);
+});
+
+test('selected PDF attachment storage error renders message under table', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/not-pdf.pdf', 'title' => 'not-pdf.pdf', 'type' => 'application/pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/files/not-pdf.pdf' => ['status' => 500, 'headers' => ['Content-Type' => 'text/plain'], 'body' => 'download failed'],
+    ]);
+
+    $response = app($fake, tempDir())->handle('123', '0');
+
+    assertSameValue(502, $response['status']);
+    assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
+    assertTrueValue(str_contains($response['body'], '<td>not-pdf.pdf</td>'));
+    assertTrueValue(str_contains($response['body'], 'Nie udało się zapisać pliku polisy. Spróbuj ponownie.'));
 });
 
 test('app config loads from PHP config files', function (): void {

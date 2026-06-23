@@ -126,15 +126,16 @@ final class TicketPdfAttachments
             $type = $payload['type'] ?? $payload['mime'] ?? $payload['contentType'] ?? null;
             $size = $payload['size'] ?? null;
             $dataModel = $this->normalizeModel($this->stringValue($payload['_sys']['model'] ?? null));
-            $id = trim($file);
+            $fileId = trim($file);
+            $id = $this->stringValue($payload['id'] ?? null) ?? $fileId;
             $mapper = $this->resolveDaktelaAttachmentMapper($activity, $dataModel, $source);
             $attachments[] = [
-                'file' => $mapper !== null ? $this->daktelaDownloadPath($mapper, $id, is_string($title) ? $title : '') : $id,
+                'file' => $mapper !== null ? $this->daktelaDownloadPath($mapper, $fileId, is_string($title) ? $title : '') : $fileId,
                 'title' => is_string($title) && $title !== '' ? $title : null,
                 'type' => is_string($type) && $type !== '' ? $type : null,
                 'size' => is_int($size) ? $size : null,
                 'source' => $source,
-                'id' => $id,
+                'id' => trim($id),
                 'name' => $this->stringValue($payload['name'] ?? null),
                 'dataModel' => $dataModel !== '' ? $dataModel : null,
                 'mapper' => $mapper,
