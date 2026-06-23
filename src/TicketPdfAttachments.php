@@ -84,13 +84,25 @@ final class TicketPdfAttachments
                 continue;
             }
 
-            $activityAttachments = $activity['attachments'] ?? [];
-            if (is_array($activityAttachments)) {
-                $attachments = array_merge($attachments, $this->collectAttachments($activityAttachments, 'activity'));
-            }
+            $attachments = array_merge(
+                $attachments,
+                $this->attachmentsFromField($activity, 'activity'),
+                is_array($activity['item'] ?? null) ? $this->attachmentsFromField($activity['item'], 'activity_item') : []
+            );
         }
 
         return $attachments;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null}>
+     */
+    private function attachmentsFromField(array $payload, string $source): array
+    {
+        $attachments = $payload['attachments'] ?? [];
+
+        return is_array($attachments) ? $this->collectAttachments($attachments, $source) : [];
     }
 
     /**

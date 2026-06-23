@@ -283,6 +283,39 @@ test('ticket PDF list includes activity attachment with numeric file id', functi
     assertTrueValue(str_contains($response['body'], '<td>przykladowa_polisa_ubezpieczenia_samochodu.pdf</td>'));
 });
 
+test('ticket PDF list includes PDFs from nested activity item attachments', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => false,
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse([
+            'result' => [
+                'data' => [
+                    [
+                        'name' => 'activity-1',
+                        'item' => [
+                            'name' => 'email-1',
+                            'attachments' => [
+                                ['file' => '/files/item-readme.txt', 'title' => 'item-readme.txt', 'type' => 'text/plain'],
+                                ['file' => 2030, 'title' => 'nested-policy.pdf', 'type' => 'application/pdf'],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+
+    $response = app($fake, tempDir())->handle('123', null);
+
+    assertSameValue(200, $response['status']);
+    assertTrueValue(str_contains($response['body'], '<td>nested-policy.pdf</td>'));
+    assertTrueValue(!str_contains($response['body'], 'item-readme.txt'));
+});
+
 test('configured utility origin rejects direct browser entry requests', function (): void {
     $response = app(new FakeDaktela([]), tempDir(), 'https://ingreen.daktela.com')->handle('123', null);
     $payload = errorBody($response);
