@@ -11,6 +11,7 @@ use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataExtractor;
 use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\ClaudeMessagesClient;
 use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\ClaudePolicyDataExtractor;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataResponseParser;
+use Ingreen\DaktelaPolicy\Support\AppException;
 use Ingreen\DaktelaPolicy\TicketPdfAttachments;
 use Ingreen\DaktelaPolicy\WebhookApp;
 use Anthropic\Messages\DocumentBlockParam;
@@ -624,7 +625,7 @@ test('selected PDF attachment storage error renders message under table', functi
     assertSameValue(502, $response['status']);
     assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
     assertTrueValue(str_contains($response['body'], '<td>not-pdf.pdf</td>'));
-    assertTrueValue(str_contains($response['body'], 'Nie udało się przetworzyć pliku polisy:'));
+    assertTrueValue(str_contains($response['body'], 'Nie udało się pobrać pliku polisy z Dakteli.'));
 });
 
 test('selected PDF attachment extraction error renders message under table', function (): void {
@@ -648,7 +649,31 @@ test('selected PDF attachment extraction error renders message under table', fun
     assertSameValue(500, $response['status']);
     assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
     assertTrueValue(str_contains($response['body'], '<td>policy.pdf</td>'));
-    assertTrueValue(str_contains($response['body'], 'Nie udało się przetworzyć pliku polisy: Claude unavailable'));
+    assertTrueValue(str_contains($response['body'], 'Wystąpił nieoczekiwany błąd podczas odczytu danych z polisy.'));
+});
+
+test('selected PDF attachment Claude extraction error renders Claude message under table', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/policy.pdf', 'title' => 'policy.pdf', 'type' => 'application/pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/files/policy.pdf' => pdfResponse(),
+    ]);
+
+    $response = app($fake, tempDir(), extractor: new FakePolicyDataExtractor(exception: new AppException(502, 'claude_policy_extraction_failed', 'Claude policy extraction request failed.')))
+        ->handle('123', '0');
+
+    assertSameValue(502, $response['status']);
+    assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
+    assertTrueValue(str_contains($response['body'], '<td>policy.pdf</td>'));
+    assertTrueValue(str_contains($response['body'], 'Nie udało się odczytać danych z polisy przez Claude.'));
 });
 
 test('app config loads from PHP config files', function (): void {

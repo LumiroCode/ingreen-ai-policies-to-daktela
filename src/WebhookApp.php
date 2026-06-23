@@ -153,7 +153,7 @@ final class WebhookApp
                 'headers' => $this->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
                 'body' => $this->renderPdfAttachmentsTable($ticketId, $attachments, [
                     'type' => 'error',
-                    'text' => 'Nie udało się przetworzyć pliku polisy: ' . $exception->getMessage(),
+                    'text' => $this->policyProcessingErrorMessage($exception),
                 ]),
             ];
         } catch (Throwable $exception) {
@@ -168,7 +168,7 @@ final class WebhookApp
                 'headers' => $this->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
                 'body' => $this->renderPdfAttachmentsTable($ticketId, $attachments, [
                     'type' => 'error',
-                    'text' => 'Nie udało się przetworzyć pliku polisy: ' . $exception->getMessage(),
+                    'text' => $this->policyProcessingErrorMessage($exception),
                 ]),
             ];
         }
@@ -225,6 +225,23 @@ final class WebhookApp
             'value' => $data->value,
             'raw_response' => $data->rawResponse,
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+    }
+
+    private function policyProcessingErrorMessage(Throwable $exception): string
+    {
+        if (!$exception instanceof AppException) {
+            return 'Wystąpił nieoczekiwany błąd podczas odczytu danych z polisy.';
+        }
+
+        return match ($exception->errorCode()) {
+            'attachment_download_failed', 'upstream_http_error', 'daktela_auth_failed' => 'Nie udało się pobrać pliku polisy z Dakteli.',
+            'attachment_too_large' => 'Plik polisy jest większy niż dozwolony limit.',
+            'attachment_is_not_pdf' => 'Wybrany załącznik nie jest poprawnym plikiem PDF.',
+            'policy_temp_dir_failed', 'policy_temp_write_failed', 'policy_pdf_not_readable' => 'Nie udało się zapisać pliku polisy do odczytu.',
+            'claude_policy_extraction_failed' => 'Nie udało się odczytać danych z polisy przez Claude.',
+            'policy_extraction_parse_failed' => 'Claude zwrócił odpowiedź w nieoczekiwanym formacie.',
+            default => 'Nie udało się przetworzyć pliku polisy.',
+        };
     }
 
     /**
