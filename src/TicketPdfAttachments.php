@@ -17,7 +17,7 @@ final class TicketPdfAttachments
     }
 
     /**
-     * @return list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null}>
+     * @return list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}>
      */
     public function forTicket(string $ticketId): array
     {
@@ -35,8 +35,8 @@ final class TicketPdfAttachments
     }
 
     /**
-     * @param list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null}> $attachments
-     * @return array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null}
+     * @param list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
+     * @return array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}
      */
     public function byIndex(array $attachments, string $attachmentIndex): array
     {
@@ -58,7 +58,7 @@ final class TicketPdfAttachments
     }
 
     /**
-     * @return list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null}>
+     * @return list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}>
      */
     private function ticketActivityAttachments(string $ticketId): array
     {
@@ -86,8 +86,9 @@ final class TicketPdfAttachments
 
             $attachments = array_merge(
                 $attachments,
-                $this->attachmentsFromField($activity, 'activity'),
-                is_array($activity['item'] ?? null) ? $this->attachmentsFromField($activity['item'], 'activity_item') : []
+                $this->attachmentsFromField($activity, 'activity.attachments', $activity),
+                is_array($activity['item'] ?? null) ? $this->attachmentsFromField($activity['item'], 'activity.item.attachments', $activity) : [],
+                is_array($activity['item'] ?? null) ? $this->attachmentsFromField($activity['item'], 'activity.item.inlineAttachments', $activity, 'inlineAttachments') : []
             );
         }
 
@@ -96,20 +97,22 @@ final class TicketPdfAttachments
 
     /**
      * @param array<string, mixed> $payload
-     * @return list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null}>
+     * @param array<string, mixed>|null $activity
+     * @return list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}>
      */
-    private function attachmentsFromField(array $payload, string $source): array
+    private function attachmentsFromField(array $payload, string $source, ?array $activity = null, string $field = 'attachments'): array
     {
-        $attachments = $payload['attachments'] ?? [];
+        $attachments = $payload[$field] ?? [];
 
-        return is_array($attachments) ? $this->collectAttachments($attachments, $source) : [];
+        return is_array($attachments) ? $this->collectAttachments($attachments, $source, $activity) : [];
     }
 
     /**
      * @param mixed $payload
-     * @return list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null}>
+     * @param array<string, mixed>|null $activity
+     * @return list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}>
      */
-    private function collectAttachments(mixed $payload, string $source): array
+    private function collectAttachments(mixed $payload, string $source, ?array $activity = null): array
     {
         if (!is_array($payload)) {
             return [];
@@ -122,22 +125,81 @@ final class TicketPdfAttachments
             $title = $payload['title'] ?? $payload['filename'] ?? $payload['name'] ?? null;
             $type = $payload['type'] ?? $payload['mime'] ?? $payload['contentType'] ?? null;
             $size = $payload['size'] ?? null;
+            $dataModel = $this->normalizeModel($this->stringValue($payload['_sys']['model'] ?? null));
+            $id = trim($file);
+            $mapper = $this->resolveDaktelaAttachmentMapper($activity, $dataModel, $source);
             $attachments[] = [
-                'file' => trim($file),
+                'file' => $mapper !== null ? $this->daktelaDownloadPath($mapper, $id, is_string($title) ? $title : '') : $id,
                 'title' => is_string($title) && $title !== '' ? $title : null,
                 'type' => is_string($type) && $type !== '' ? $type : null,
                 'size' => is_int($size) ? $size : null,
                 'source' => $source,
+                'id' => $id,
+                'name' => $this->stringValue($payload['name'] ?? null),
+                'dataModel' => $dataModel !== '' ? $dataModel : null,
+                'mapper' => $mapper,
             ];
         }
 
         foreach ($payload as $value) {
             if (is_array($value)) {
-                $attachments = array_merge($attachments, $this->collectAttachments($value, $source));
+                $attachments = array_merge($attachments, $this->collectAttachments($value, $source, $activity));
             }
         }
 
         return $attachments;
+    }
+
+    /**
+     * @param array<string, mixed>|null $activity
+     */
+    private function resolveDaktelaAttachmentMapper(?array $activity, ?string $attachmentModel, string $sourcePath): ?string
+    {
+        $directModelMappers = [
+            'activitiesEmailFiles' => 'activitiesEmailFiles',
+            'activitiesWebFiles' => 'activitiesWebFiles',
+            'activitiesFbmFiles' => 'activitiesFbmFiles',
+            'activitiesIgdmFiles' => 'activitiesIgdmFiles',
+            'activitiesWapFiles' => 'activitiesWapFiles',
+            'activitiesVbrFiles' => 'activitiesVbrFiles',
+        ];
+
+        if ($attachmentModel !== null && isset($directModelMappers[$attachmentModel])) {
+            return $directModelMappers[$attachmentModel];
+        }
+
+        if ($sourcePath === 'activity.attachments' || $attachmentModel === 'activitiesAttachments') {
+            return 'activitiesComment';
+        }
+
+        if ($activity === null) {
+            return null;
+        }
+
+        return match ($this->normalizeModel($this->stringValue($activity['item']['_sys']['model'] ?? null))) {
+            'activitiesEmail' => 'activitiesEmailFiles',
+            'activitiesWeb' => 'activitiesWebFiles',
+            'activitiesFbm' => 'activitiesFbmFiles',
+            'activitiesIgdm' => 'activitiesIgdmFiles',
+            'activitiesWap' => 'activitiesWapFiles',
+            'activitiesVbr' => 'activitiesVbrFiles',
+            default => null,
+        };
+    }
+
+    private function daktelaDownloadPath(string $mapper, string $fileId, string $title): string
+    {
+        return '/file/download.php?' . http_build_query([
+            'mapper' => $mapper,
+            'name' => $fileId,
+            'iconHash' => $title,
+            'download' => 1,
+        ]);
+    }
+
+    private function normalizeModel(?string $model): string
+    {
+        return str_replace('\\', '', (string) $model);
     }
 
     private function stringValue(mixed $value): ?string
@@ -146,8 +208,8 @@ final class TicketPdfAttachments
     }
 
     /**
-     * @param list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null}> $attachments
-     * @return list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null}>
+     * @param list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
+     * @return list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}>
      */
     private function uniqueAttachments(array $attachments): array
     {
@@ -167,8 +229,8 @@ final class TicketPdfAttachments
     }
 
     /**
-     * @param list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null}> $attachments
-     * @return list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null}>
+     * @param list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
+     * @return list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}>
      */
     private function pdfAttachments(array $attachments): array
     {

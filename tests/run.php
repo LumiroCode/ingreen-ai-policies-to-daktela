@@ -283,6 +283,83 @@ test('ticket PDF list includes activity attachment with numeric file id', functi
     assertTrueValue(str_contains($response['body'], '<td>przykladowa_polisa_ubezpieczenia_samochodu.pdf</td>'));
 });
 
+test('selected email activity attachment downloads through Daktela file mapper', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/15242' => jsonResponse([
+            'result' => [
+                'name' => '15242',
+                'has_attachment' => false,
+            ],
+        ]),
+        '/api/v6/tickets/15242/activities' => jsonResponse([
+            'result' => [
+                'data' => [
+                    [
+                        'name' => 'activity_6a3a502c8ea50690005376',
+                        'attachments' => [
+                            [
+                                'file' => 35869,
+                                'title' => 'Polisa_904001145228.pdf',
+                                'type' => 'application/pdf',
+                                '_sys' => ['model' => 'activitiesEmailFiles'],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]),
+        '/file/download.php' => pdfResponse("%PDF-1.4\nmapped"),
+    ]);
+    $app = app($fake, tempDir());
+
+    $download = $app->handle('15242', '0');
+    $request = $fake->requests[2];
+    parse_str(parse_url($request['url'], PHP_URL_QUERY) ?: '', $query);
+
+    assertSameValue(200, $download['status']);
+    assertSameValue('https://daktela.example/file/download.php?mapper=activitiesEmailFiles&name=35869&iconHash=Polisa_904001145228.pdf&download=1', $request['url']);
+    assertSameValue('activitiesEmailFiles', $query['mapper']);
+    assertSameValue('35869', $query['name']);
+    assertSameValue('Polisa_904001145228.pdf', $query['iconHash']);
+    assertSameValue('1', $query['download']);
+});
+
+test('selected activity comment attachment downloads through activities comment mapper', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/15242' => jsonResponse([
+            'result' => [
+                'name' => '15242',
+                'has_attachment' => false,
+            ],
+        ]),
+        '/api/v6/tickets/15242/activities' => jsonResponse([
+            'result' => [
+                'data' => [
+                    [
+                        'name' => 'activity_6a3a502c8ea50690005376',
+                        'attachments' => [
+                            [
+                                'file' => 2023,
+                                'title' => 'Faktura FV 9_4_2026.pdf',
+                                'type' => 'application/pdf',
+                                '_sys' => ['model' => 'activities\\Attachments'],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]),
+        '/file/download.php' => pdfResponse("%PDF-1.4\ncomment"),
+    ]);
+    $app = app($fake, tempDir());
+
+    $download = $app->handle('15242', '0');
+    $request = $fake->requests[2];
+
+    assertSameValue(200, $download['status']);
+    assertSameValue('https://daktela.example/file/download.php?mapper=activitiesComment&name=2023&iconHash=Faktura+FV+9_4_2026.pdf&download=1', $request['url']);
+});
+
 test('ticket PDF list includes PDFs from nested activity item attachments', function (): void {
     $fake = new FakeDaktela([
         '/api/v6/tickets/123' => jsonResponse([

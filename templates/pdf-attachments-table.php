@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * @var list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null}> $attachments
+ * @var list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
  * @var string $accessToken
  * @var string $ticketId
  */

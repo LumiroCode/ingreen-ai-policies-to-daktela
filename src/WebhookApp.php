@@ -124,7 +124,7 @@ final class WebhookApp
     }
 
     /**
-     * @param list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null}> $attachments
+     * @param list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
      */
     private function renderPdfAttachmentsTable(string $ticketId, array $attachments): string
     {
@@ -257,7 +257,7 @@ final class WebhookApp
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
      */
     private function looksLikePdf(string $body, ?string $contentType, array $attachment): bool
     {
@@ -267,7 +267,7 @@ final class WebhookApp
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
      */
     private function hasPdfType(array $attachment): bool
     {
@@ -275,7 +275,7 @@ final class WebhookApp
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
      */
     private function hasPdfExtension(array $attachment): bool
     {
@@ -284,7 +284,7 @@ final class WebhookApp
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
      */
     private function downloadFilename(array $attachment): string
     {
