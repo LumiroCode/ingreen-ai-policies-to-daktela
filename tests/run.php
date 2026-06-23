@@ -106,7 +106,7 @@ function tempDir(): string
 
 function app(FakeDaktela $fake, string $dir): WebhookApp
 {
-    $config = new AppConfig('https://daktela.example', 'api-token', 'secret', $dir . '/var', $dir . '/cache', $dir . '/policies', 1_000_000);
+    $config = new AppConfig('https://daktela.example', 'api-token', $dir . '/var', $dir . '/cache', $dir . '/policies', 1_000_000);
 
     return new WebhookApp(
         $config,
@@ -116,25 +116,27 @@ function app(FakeDaktela $fake, string $dir): WebhookApp
     );
 }
 
-test('webhook rejects missing shared secret', function (): void {
-    $response = app(new FakeDaktela([]), tempDir())->handle('POST', [], '{"entityType":"ticket","entityId":"1"}');
-
-    assertSameValue(401, $response['status']);
-    assertSameValue('unauthorized', $response['body']['error']['code']);
-});
-
-test('webhook rejects unsupported entity type', function (): void {
-    $response = app(new FakeDaktela([]), tempDir())->handle('POST', ['X-Webhook-Secret' => 'secret'], '{"entityType":"car","entityId":"1"}');
+test('app rejects missing ticket query parameter', function (): void {
+    $response = app(new FakeDaktela([]), tempDir())->handle(null);
 
     assertSameValue(400, $response['status']);
-    assertSameValue('unsupported_entity_type', $response['body']['error']['code']);
+    assertSameValue('invalid_request', $response['body']['error']['code']);
+    assertSameValue('ticket', $response['body']['error']['details']['field']);
+});
+
+test('app rejects empty ticket query parameter', function (): void {
+    $response = app(new FakeDaktela([]), tempDir())->handle('  ');
+
+    assertSameValue(400, $response['status']);
+    assertSameValue('invalid_request', $response['body']['error']['code']);
+    assertSameValue('ticket', $response['body']['error']['details']['field']);
 });
 
 test('ticket without attachments returns 404', function (): void {
     $fake = new FakeDaktela([
         '/api/v6/tickets/123' => jsonResponse(['result' => ['name' => '123', 'has_attachment' => false]]),
     ]);
-    $response = app($fake, tempDir())->handle('POST', ['X-Webhook-Secret' => 'secret'], '{"entityType":"ticket","entityId":"123"}');
+    $response = app($fake, tempDir())->handle('123');
 
     assertSameValue(404, $response['status']);
     assertSameValue('ticket_has_no_attachment', $response['body']['error']['code']);
@@ -157,7 +159,7 @@ test('selector prefers PDF metadata and policy filename', function (): void {
         '/files/policy.bin' => pdfResponse(),
     ]);
 
-    $response = app($fake, tempDir())->handle('POST', ['X-Webhook-Secret' => 'secret'], '{"entityType":"ticket","entityId":"123"}');
+    $response = app($fake, tempDir())->handle('123');
 
     assertSameValue(200, $response['status']);
     assertSameValue('/files/policy.bin', $response['body']['result']['attachment']['file']);
@@ -188,7 +190,7 @@ test('downloader handles relative Daktela file path', function (): void {
 
 test('daktela 401 maps to upstream auth error', function (): void {
     $fake = new FakeDaktela(['/api/v6/tickets/123' => jsonResponse([], 401)]);
-    $response = app($fake, tempDir())->handle('POST', ['X-Webhook-Secret' => 'secret'], '{"entityType":"ticket","entityId":"123"}');
+    $response = app($fake, tempDir())->handle('123');
 
     assertSameValue(502, $response['status']);
     assertSameValue('daktela_auth_failed', $response['body']['error']['code']);
@@ -214,8 +216,8 @@ test('full mocked ticket download and duplicate idempotency', function (): void 
     ]);
     $app = app($fake, tempDir());
 
-    $first = $app->handle('POST', ['X-Webhook-Secret' => 'secret'], '{"entityType":"ticket","entityId":"123"}');
-    $second = $app->handle('POST', ['X-Webhook-Secret' => 'secret'], '{"entityType":"ticket","entityId":"123"}');
+    $first = $app->handle('123');
+    $second = $app->handle('123');
 
     assertSameValue(200, $first['status']);
     assertSameValue('downloaded', $first['body']['result']['status']);
@@ -233,7 +235,6 @@ test('app config loads from PHP config files', function (): void {
 <?php
 return [
     'daktelaBaseUrl' => 'https://daktela.example/',
-    'webhookSharedSecret' => 'secret',
     'varDir' => '/tmp/app-var',
     'cacheDir' => '/tmp/cache',
     'policyTempDir' => '/tmp/policies',
@@ -250,7 +251,6 @@ PHP);
 
     assertSameValue('https://daktela.example', $config->daktelaBaseUrl);
     assertSameValue('token-from-file', $config->daktelaApiToken);
-    assertSameValue('secret', $config->webhookSharedSecret);
     assertSameValue('/tmp/app-var', $config->varDir);
     assertSameValue('/tmp/cache', $config->cacheDir);
     assertSameValue('/tmp/policies', $config->policyTempDir);
@@ -265,7 +265,6 @@ test('app config requires credentials file', function (): void {
 <?php
 return [
     'daktelaBaseUrl' => 'https://daktela.example',
-    'webhookSharedSecret' => 'secret',
     'varDir' => '/tmp/app-var',
     'cacheDir' => '/tmp/cache',
     'policyTempDir' => '/tmp/policies',

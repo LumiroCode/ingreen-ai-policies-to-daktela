@@ -21,43 +21,20 @@ final class WebhookApp
     }
 
     /**
-     * @param array<string, string> $headers
      * @return array{status:int,body:array<string,mixed>}
      */
-    public function handle(string $method, array $headers, string $rawBody): array
+    public function handle(?string $ticketId): array
     {
         $requestId = bin2hex(random_bytes(8));
 
         try {
-            if (strtoupper($method) !== 'POST') {
-                throw new AppException(405, 'method_not_allowed', 'Only POST is supported.');
-            }
+            $ticketId = $this->requiredTicketId($ticketId);
 
-            if (!hash_equals($this->config->webhookSharedSecret, $this->header($headers, 'X-Webhook-Secret') ?? '')) {
-                throw new AppException(401, 'unauthorized', 'Invalid webhook secret.');
-            }
-
-            $payload = json_decode($rawBody, true);
-
-            if (!is_array($payload)) {
-                throw new AppException(400, 'invalid_json', 'Request body must be a JSON object.');
-            }
-
-            $entityType = $this->requiredString($payload, 'entityType');
-            $entityId = $this->requiredString($payload, 'entityId');
-
-            if (strtolower($entityType) !== 'ticket') {
-                throw new AppException(400, 'unsupported_entity_type', 'Unsupported entity type.', [
-                    'entityType' => $entityType,
-                    'supportedEntityTypes' => ['ticket'],
-                ]);
-            }
-
-            $result = $this->downloadTicketPolicy($entityId, $requestId);
+            $result = $this->downloadTicketPolicy($ticketId, $requestId);
 
             return ['status' => 200, 'body' => ['requestId' => $requestId, 'result' => $result]];
         } catch (AppException $exception) {
-            $this->logger->warning('Webhook request failed.', [
+            $this->logger->warning('Ticket request failed.', [
                 'requestId' => $requestId,
                 'errorCode' => $exception->errorCode(),
                 'details' => $exception->details(),
@@ -295,32 +272,13 @@ final class WebhookApp
         return is_array($ticket) ? (string) ($ticket['name'] ?? '') === $ticketId : (string) $ticket === $ticketId;
     }
 
-    /**
-     * @param array<string, mixed> $payload
-     */
-    private function requiredString(array $payload, string $key): string
+    private function requiredTicketId(?string $ticketId): string
     {
-        $value = $payload[$key] ?? null;
-
-        if (!is_string($value) || trim($value) === '') {
-            throw new AppException(400, 'invalid_request', 'Required string field is missing.', ['field' => $key]);
+        if ($ticketId === null || trim($ticketId) === '') {
+            throw new AppException(400, 'invalid_request', 'Required ticket query parameter is missing.', ['field' => 'ticket']);
         }
 
-        return trim($value);
-    }
-
-    /**
-     * @param array<string, string> $headers
-     */
-    private function header(array $headers, string $name): ?string
-    {
-        foreach ($headers as $header => $value) {
-            if (strtolower($header) === strtolower($name)) {
-                return $value;
-            }
-        }
-
-        return null;
+        return trim($ticketId);
     }
 
     /**

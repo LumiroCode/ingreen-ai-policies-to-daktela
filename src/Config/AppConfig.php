@@ -15,7 +15,6 @@ final class AppConfig
     public function __construct(
         public readonly string $daktelaBaseUrl,
         public readonly string $daktelaApiToken,
-        public readonly string $webhookSharedSecret,
         public readonly string $varDir,
         public readonly string $cacheDir,
         public readonly string $policyTempDir,
@@ -33,7 +32,6 @@ final class AppConfig
         return new self(
             rtrim(self::requiredString($settings, 'daktelaBaseUrl', $appConfigPath), '/'),
             self::tokenFromCredentialsFile($credentialsPath),
-            self::requiredString($settings, 'webhookSharedSecret', $appConfigPath),
             self::requiredString($settings, 'varDir', $appConfigPath),
             self::requiredString($settings, 'cacheDir', $appConfigPath),
             self::requiredString($settings, 'policyTempDir', $appConfigPath),

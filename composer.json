@@ -1,6 +1,6 @@
 {
   "name": "ingreen/ai-policies-to-daktela",
-  "description": "Webhook app that downloads policy PDF attachments from Daktela entities.",
+  "description": "App that downloads policy PDF attachments from Daktela tickets.",
   "type": "project",
   "license": "proprietary",
   "autoload": {

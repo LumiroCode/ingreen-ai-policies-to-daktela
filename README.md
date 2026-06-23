@@ -1,6 +1,6 @@
 # Daktela Policy Attachment Downloader
 
-Small plain PHP webhook app that accepts a Daktela event payload, resolves a ticket policy PDF attachment, downloads it from Daktela, and stores it in a local flat temp directory.
+Small plain PHP app that accepts a Daktela ticket id from the `ticket` query parameter, resolves a ticket policy PDF attachment, downloads it from Daktela, and stores it in a local flat temp directory.
 
 ## Requirements
 
@@ -23,7 +23,6 @@ Edit `config/app.php`:
 
 return [
     'daktelaBaseUrl' => 'https://your-daktela-instance.example',
-    'webhookSharedSecret' => 'replace-me',
     'varDir' => __DIR__ . '/../var',
     'cacheDir' => __DIR__ . '/../var/cache',
     'policyTempDir' => __DIR__ . '/../var/cache/policies',
@@ -52,10 +51,7 @@ php -S 127.0.0.1:8080 -t public
 Smoke test:
 
 ```bash
-curl -X POST http://127.0.0.1:8080 \
-  -H 'Content-Type: application/json' \
-  -H 'X-Webhook-Secret: replace-me' \
-  -d '{"entityType":"ticket","entityId":"123"}'
+curl 'http://127.0.0.1:8080?ticket=123'
 ```
 
 Successful responses return `status` as `downloaded` or `already_exists` and include the local `path`.
@@ -82,13 +78,13 @@ composer test
 The app is intentionally small:
 
 - `public/index.php` wires configuration, logging, runtime directories, and the app.
-- `src/WebhookApp.php` handles the webhook and the ticket policy download workflow.
+- `src/WebhookApp.php` handles the ticket query parameter and the ticket policy download workflow.
 - `src/Daktela/DaktelaClient.php` performs authenticated Daktela JSON and file requests.
 - `src/PolicyStore.php` creates deterministic local PDF filenames and skips duplicates.
 - `src/Config`, `src/Logging`, and `src/Support` contain config loading, daily logs, and directory/error helpers.
 
 ## Current Scope
 
-V1 supports `ticket` only. Add other Daktela entity types inside `WebhookApp` when their attachment shape is known.
+V1 supports downloading policy attachments for tickets only. Add other Daktela entity types inside `WebhookApp` when their attachment shape is known.
 
 The local OpenAPI document exposes `has_attachment` and attachment metadata shapes, but not a dedicated attachment download endpoint. For that reason, the Daktela-specific discovery logic is kept in `WebhookApp` and can be replaced once the exact endpoint is known.

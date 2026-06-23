@@ -34,7 +34,7 @@ try {
         $logger
     );
 
-    sendJson($app->handle($_SERVER['REQUEST_METHOD'] ?? 'GET', getallheaders() ?: [], file_get_contents('php://input') ?: ''));
+    sendJson($app->handle($_GET['ticket'] ?? null));
 } catch (AppException $exception) {
     sendJson(['status' => $exception->statusCode(), 'body' => [
         'error' => [
