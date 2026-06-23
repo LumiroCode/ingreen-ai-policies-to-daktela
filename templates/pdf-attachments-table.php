@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 /**
  * @var list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null}> $attachments
+ * @var string $accessToken
  * @var string $ticketId
  */
 
@@ -65,6 +66,7 @@ declare(strict_types=1);
                         <form method="get">
                             <input type="hidden" name="ticket" value="<?= htmlspecialchars($ticketId, ENT_QUOTES, 'UTF-8') ?>">
                             <input type="hidden" name="attachment" value="<?= $index ?>">
+                            <input type="hidden" name="access_token" value="<?= htmlspecialchars($accessToken, ENT_QUOTES, 'UTF-8') ?>">
                             <button type="submit">odczytaj</button>
                         </form>
                     </td>
