@@ -238,10 +238,46 @@ final class WebhookApp
             'attachment_too_large' => 'Plik polisy jest większy niż dozwolony limit.',
             'attachment_is_not_pdf' => 'Wybrany załącznik nie jest poprawnym plikiem PDF.',
             'policy_temp_dir_failed', 'policy_temp_write_failed', 'policy_pdf_not_readable' => 'Nie udało się zapisać pliku polisy do odczytu.',
-            'claude_policy_extraction_failed' => 'Nie udało się odczytać danych z polisy przez Claude.',
+            'claude_policy_extraction_failed' => $this->claudePolicyExtractionErrorMessage($exception),
             'policy_extraction_parse_failed' => 'Claude zwrócił odpowiedź w nieoczekiwanym formacie.',
             default => 'Nie udało się przetworzyć pliku polisy.',
         };
+    }
+
+    private function claudePolicyExtractionErrorMessage(AppException $exception): string
+    {
+        $anthropicMessage = $this->anthropicErrorMessage($exception);
+
+        if ($anthropicMessage !== null) {
+            return $anthropicMessage;
+        }
+
+        return 'Nie udało się odczytać danych z polisy przez Claude.';
+    }
+
+    private function anthropicErrorMessage(AppException $exception): ?string
+    {
+        $message = $exception->details()['message'] ?? null;
+
+        if (!is_string($message) || trim($message) === '') {
+            return null;
+        }
+
+        $jsonStart = strpos($message, '{');
+        $json = $jsonStart === false ? $message : substr($message, $jsonStart);
+        $payload = json_decode($json, true);
+
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        $anthropicMessage = $payload['body']['error']['message'] ?? null;
+
+        if (!is_string($anthropicMessage) || trim($anthropicMessage) === '') {
+            return null;
+        }
+
+        return trim($anthropicMessage);
     }
 
     /**

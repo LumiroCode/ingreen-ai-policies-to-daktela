@@ -679,6 +679,44 @@ test('selected PDF attachment Claude extraction error renders Claude message und
     assertTrueValue(str_contains($response['body'], 'Nie udało się odczytać danych z polisy przez Claude.'));
 });
 
+test('selected PDF attachment Claude extraction error renders Anthropic error message under table', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/policy.pdf', 'title' => 'policy.pdf', 'type' => 'application/pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/files/policy.pdf' => pdfResponse(),
+    ]);
+    $anthropicMessage = 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.';
+    $detailsMessage = "Anthropic Bad Request Exception\n" . json_encode([
+        'status' => 400,
+        'body' => [
+            'type' => 'error',
+            'error' => [
+                'type' => 'invalid_request_error',
+                'message' => $anthropicMessage,
+            ],
+            'request_id' => 'req_011CcL5WpcWQ6WgdAo5D7RYD',
+        ],
+    ], JSON_THROW_ON_ERROR);
+
+    $response = app($fake, tempDir(), extractor: new FakePolicyDataExtractor(exception: new AppException(502, 'claude_policy_extraction_failed', 'Claude policy extraction request failed.', [
+        'message' => $detailsMessage,
+    ])))->handle('123', '0');
+
+    assertSameValue(502, $response['status']);
+    assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
+    assertTrueValue(str_contains($response['body'], '<td>policy.pdf</td>'));
+    assertTrueValue(str_contains($response['body'], 'Your credit balance is too low to access the Anthropic API.'));
+    assertTrueValue(!str_contains($response['body'], 'Nie udało się odczytać danych z polisy przez Claude.'));
+});
+
 test('app config loads from PHP config files', function (): void {
     $dir = tempDir();
     $appConfig = $dir . '/app.php';
