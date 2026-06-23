@@ -42,6 +42,10 @@ declare(strict_types=1);
             padding: 6px 12px;
         }
 
+        button[disabled] {
+            opacity: 0.7;
+        }
+
         .message {
             margin-top: 12px;
             padding: 10px 12px;
@@ -60,6 +64,35 @@ declare(strict_types=1);
             background: #fdecec;
             border: 1px solid #d98a8a;
             color: #7a1f1f;
+        }
+
+        .message.processing {
+            align-items: center;
+            background: #eef4ff;
+            border: 1px solid #8aa9d9;
+            color: #1f3f70;
+            display: flex;
+            gap: 8px;
+        }
+
+        .message[hidden] {
+            display: none;
+        }
+
+        .spinner {
+            animation: spin 0.8s linear infinite;
+            border: 2px solid currentColor;
+            border-right-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            height: 14px;
+            width: 14px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
         }
     </style>
 </head>
@@ -100,5 +133,26 @@ declare(strict_types=1);
             <?= htmlspecialchars($message['text'], ENT_QUOTES, 'UTF-8') ?>
         </div>
     <?php endif; ?>
+    <div id="processing-message" class="message processing" hidden role="status" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        <span>Trwa odczyt danych z polisy. Proszę czekać...</span>
+    </div>
+    <script>
+        document.querySelectorAll('form').forEach(function (form) {
+            form.addEventListener('submit', function () {
+                var button = form.querySelector('button[type="submit"]');
+                var message = document.getElementById('processing-message');
+
+                if (button !== null) {
+                    button.disabled = true;
+                    button.textContent = 'odczytuję...';
+                }
+
+                if (message !== null) {
+                    message.hidden = false;
+                }
+            });
+        });
+    </script>
 </body>
 </html>

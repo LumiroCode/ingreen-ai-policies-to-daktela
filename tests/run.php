@@ -247,6 +247,9 @@ test('ticket PDF list renders table and does not download files', function (): v
     assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
     assertTrueValue(str_contains($response['body'], '<td>scan.pdf</td>'));
     assertTrueValue(str_contains($response['body'], '<td>policy.pdf</td>'));
+    assertTrueValue(str_contains($response['body'], 'id="processing-message"'));
+    assertTrueValue(str_contains($response['body'], 'Trwa odczyt danych z polisy.'));
+    assertTrueValue(str_contains($response['body'], "button.textContent = 'odczytuję...'"));
     assertTrueValue(!str_contains($response['body'], 'readme.txt'));
     assertSameValue(0, $downloadCount);
 });
