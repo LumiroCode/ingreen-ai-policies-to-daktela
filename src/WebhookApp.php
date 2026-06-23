@@ -25,13 +25,19 @@ final class WebhookApp
     /**
      * @return array{status:int,headers:array<string,string>,body:string}
      */
-    public function handle(?string $ticketId, ?string $attachmentIndex, ?string $accessToken = null, ?string $referrer = null): array
+    public function handle(
+        ?string $ticketId,
+        ?string $attachmentIndex,
+        ?string $accessToken = null,
+        ?string $utilityKey = null,
+        ?string $referrer = null
+    ): array
     {
         $requestId = bin2hex(random_bytes(8));
 
         try {
             $ticketId = $this->requiredTicketId($ticketId);
-            $this->assertAccessAllowed($ticketId, $accessToken, $referrer);
+            $this->assertAccessAllowed($ticketId, $accessToken, $utilityKey, $referrer);
 
             if ($attachmentIndex !== null && trim($attachmentIndex) !== '') {
                 return $this->downloadSelectedTicketPdf($ticketId, $attachmentIndex, $requestId);
@@ -137,9 +143,9 @@ final class WebhookApp
         return trim($ticketId);
     }
 
-    private function assertAccessAllowed(string $ticketId, ?string $accessToken, ?string $referrer): void
+    private function assertAccessAllowed(string $ticketId, ?string $accessToken, ?string $utilityKey, ?string $referrer): void
     {
-        if ($this->config->allowedUtilityOrigin === null) {
+        if ($this->config->allowedUtilityOrigin === null && $this->config->utilitySecretKey === null) {
             return;
         }
 
@@ -147,13 +153,31 @@ final class WebhookApp
             return;
         }
 
-        if ($referrer !== null && $this->isAllowedReferrer($referrer)) {
+        if ($this->isValidEntryRequest($utilityKey, $referrer)) {
             return;
         }
 
-        throw new AppException(403, 'forbidden_utility_origin', 'This utility is only available from the configured Daktela URL.', [
+        throw new AppException(403, 'forbidden_utility_access', 'This utility requires a valid Daktela origin and utility key.', [
             'allowedOrigin' => $this->config->allowedUtilityOrigin,
+            'requiresUtilityKey' => $this->config->utilitySecretKey !== null,
         ]);
+    }
+
+    private function isValidEntryRequest(?string $utilityKey, ?string $referrer): bool
+    {
+        if ($this->config->utilitySecretKey !== null && !$this->isValidUtilityKey($utilityKey)) {
+            return false;
+        }
+
+        return $this->config->allowedUtilityOrigin === null
+            || ($referrer !== null && $this->isAllowedReferrer($referrer));
+    }
+
+    private function isValidUtilityKey(?string $utilityKey): bool
+    {
+        return $utilityKey !== null
+            && $this->config->utilitySecretKey !== null
+            && hash_equals($this->config->utilitySecretKey, $utilityKey);
     }
 
     private function isAllowedReferrer(string $referrer): bool

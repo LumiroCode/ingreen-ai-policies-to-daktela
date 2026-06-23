@@ -27,6 +27,7 @@ return [
     'cacheDir' => __DIR__ . '/../var/cache',
     'maxDownloadBytes' => 25_000_000,
     'allowedUtilityOrigin' => 'https://ingreen.daktela.com',
+    'utilitySecretKey' => 'use-a-long-random-shared-secret',
 ];
 ```
 
@@ -58,19 +59,26 @@ The ticket URL returns an HTML table with PDF attachments. The `odczytaj` button
 
 ## Daktela Utility Access Restriction
 
-Set `allowedUtilityOrigin` to the Daktela origin that is allowed to load this app:
+Set `allowedUtilityOrigin` to the Daktela origin that is allowed to load this app and `utilitySecretKey` to a long random shared secret:
 
 ```php
 'allowedUtilityOrigin' => 'https://ingreen.daktela.com',
+'utilitySecretKey' => 'use-a-long-random-shared-secret',
+```
+
+Then include the key in the initial iframe URL:
+
+```html
+<iframe src="https://your-app.example/?ticket=123&utility_key=use-a-long-random-shared-secret"></iframe>
 ```
 
 When configured, the app:
 
-- rejects initial browser requests unless their referrer origin is `https://ingreen.daktela.com`;
+- rejects initial browser requests unless their referrer origin is `https://ingreen.daktela.com` and `utility_key` matches `utilitySecretKey`;
 - sends `Content-Security-Policy: frame-ancestors https://ingreen.daktela.com` so browsers will not embed it on other sites;
-- signs the rendered `odczytaj` actions with a short-lived ticket-specific HMAC token, so follow-up PDF requests from inside the utility do not depend on same-page referrer behavior.
+- signs the rendered `odczytaj` actions with a short-lived ticket-specific `access_token`, so follow-up PDF requests from inside the utility do not expose the shared `utility_key`.
 
-This is a browser access control. It reliably blocks normal direct browser use and third-party embedding, but HTTP clients can forge `Referer`. For protection against scripted clients, Daktela would need to include a server-verifiable signature or shared secret in the utility URL.
+Treat `utilitySecretKey` as a password. Generate a high-entropy value, keep the app on HTTPS, and rotate the key if the iframe URL is exposed outside Daktela.
 
 ## Runtime Files
 

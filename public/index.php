@@ -38,6 +38,7 @@ try {
         queryStringParam('ticket'),
         queryStringParam('attachment'),
         queryStringParam('access_token'),
+        queryStringParam('utility_key'),
         $_SERVER['HTTP_REFERER'] ?? null
     ));
 } catch (AppException $exception) {

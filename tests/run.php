@@ -104,9 +104,9 @@ function tempDir(): string
     return $dir;
 }
 
-function app(FakeDaktela $fake, string $dir, ?string $allowedUtilityOrigin = null): WebhookApp
+function app(FakeDaktela $fake, string $dir, ?string $allowedUtilityOrigin = null, ?string $utilitySecretKey = null): WebhookApp
 {
-    $config = new AppConfig('https://daktela.example', 'api-token', $dir . '/var', $dir . '/cache', 1_000_000, $allowedUtilityOrigin);
+    $config = new AppConfig('https://daktela.example', 'api-token', $dir . '/var', $dir . '/cache', 1_000_000, $allowedUtilityOrigin, $utilitySecretKey);
 
     $logger = new NullLogger();
     $daktela = new DaktelaClient($config->daktelaBaseUrl, $config->daktelaApiToken, $fake);
@@ -246,12 +246,49 @@ test('ticket PDF list includes PDFs from ticket activities attachments', functio
     assertTrueValue(!in_array('/api/v6/activities', $requestPaths, true));
 });
 
+test('ticket PDF list includes activity attachment with numeric file id', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/15242' => jsonResponse([
+            'result' => [
+                'name' => '15242',
+                'has_attachment' => false,
+            ],
+        ]),
+        '/api/v6/tickets/15242/activities' => jsonResponse([
+            'result' => [
+                'data' => [
+                    [
+                        'name' => 'activity_6a3a502c8ea50690005376',
+                        'attachments' => [
+                            [
+                                'file' => 2029,
+                                'activity' => null,
+                                'inline' => 0,
+                                'cid' => '',
+                                'title' => 'przykladowa_polisa_ubezpieczenia_samochodu.pdf',
+                                'type' => 'application/pdf',
+                                'size' => 49800,
+                                'time' => '2026-06-23 11:21:48',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+
+    $response = app($fake, tempDir())->handle('15242', null);
+
+    assertSameValue(200, $response['status']);
+    assertTrueValue(str_contains($response['body'], '<td>przykladowa_polisa_ubezpieczenia_samochodu.pdf</td>'));
+});
+
 test('configured utility origin rejects direct browser entry requests', function (): void {
     $response = app(new FakeDaktela([]), tempDir(), 'https://ingreen.daktela.com')->handle('123', null);
     $payload = errorBody($response);
 
     assertSameValue(403, $response['status']);
-    assertSameValue('forbidden_utility_origin', $payload['error']['code']);
+    assertSameValue('forbidden_utility_access', $payload['error']['code']);
     assertSameValue('https://ingreen.daktela.com', $payload['error']['details']['allowedOrigin']);
 });
 
@@ -270,7 +307,7 @@ test('configured utility origin allows Daktela referrer and sets frame policy', 
     ]);
 
     $response = app($fake, tempDir(), 'https://ingreen.daktela.com')
-        ->handle('123', null, null, 'https://ingreen.daktela.com/tickets/123');
+        ->handle('123', null, null, null, 'https://ingreen.daktela.com/tickets/123');
 
     assertSameValue(200, $response['status']);
     assertSameValue('frame-ancestors https://ingreen.daktela.com', $response['headers']['Content-Security-Policy']);
@@ -292,11 +329,51 @@ test('configured utility origin allows signed in-app attachment request', functi
         '/files/scan.pdf' => pdfResponse(),
     ]);
     $app = app($fake, tempDir(), 'https://ingreen.daktela.com');
-    $list = $app->handle('123', null, null, 'https://ingreen.daktela.com/tickets/123');
-    $download = $app->handle('123', '0', accessTokenFromHtml($list['body']), 'https://app.example/?ticket=123');
+    $list = $app->handle('123', null, null, null, 'https://ingreen.daktela.com/tickets/123');
+    $download = $app->handle('123', '0', accessTokenFromHtml($list['body']), null, 'https://app.example/?ticket=123');
 
     assertSameValue(200, $download['status']);
     assertSameValue('application/pdf', $download['headers']['Content-Type']);
+});
+
+test('configured utility key rejects entry requests without the key', function (): void {
+    $response = app(new FakeDaktela([]), tempDir(), 'https://ingreen.daktela.com', 'shared-secret')
+        ->handle('123', null, null, null, 'https://ingreen.daktela.com/tickets/123');
+    $payload = errorBody($response);
+
+    assertSameValue(403, $response['status']);
+    assertSameValue('forbidden_utility_access', $payload['error']['code']);
+    assertSameValue(true, $payload['error']['details']['requiresUtilityKey']);
+});
+
+test('configured utility key rejects entry requests with the wrong key', function (): void {
+    $response = app(new FakeDaktela([]), tempDir(), 'https://ingreen.daktela.com', 'shared-secret')
+        ->handle('123', null, null, 'wrong-secret', 'https://ingreen.daktela.com/tickets/123');
+    $payload = errorBody($response);
+
+    assertSameValue(403, $response['status']);
+    assertSameValue('forbidden_utility_access', $payload['error']['code']);
+});
+
+test('configured utility key allows entry requests with the right key', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/scan.pdf', 'title' => 'scan.pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+    ]);
+
+    $response = app($fake, tempDir(), 'https://ingreen.daktela.com', 'shared-secret')
+        ->handle('123', null, null, 'shared-secret', 'https://ingreen.daktela.com/tickets/123');
+
+    assertSameValue(200, $response['status']);
+    assertTrueValue(str_contains($response['body'], 'name="access_token"'));
 });
 
 test('downloader handles relative Daktela file path', function (): void {

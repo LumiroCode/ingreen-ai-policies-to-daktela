@@ -104,9 +104,9 @@ final class TicketPdfAttachments
         }
 
         $attachments = [];
-        $file = $payload['file'] ?? $payload['url'] ?? $payload['href'] ?? null;
+        $file = $this->stringValue($payload['file'] ?? $payload['url'] ?? $payload['href'] ?? null);
 
-        if (is_string($file) && trim($file) !== '') {
+        if ($file !== null && trim($file) !== '') {
             $title = $payload['title'] ?? $payload['filename'] ?? $payload['name'] ?? null;
             $type = $payload['type'] ?? $payload['mime'] ?? $payload['contentType'] ?? null;
             $size = $payload['size'] ?? null;
@@ -126,6 +126,11 @@ final class TicketPdfAttachments
         }
 
         return $attachments;
+    }
+
+    private function stringValue(mixed $value): ?string
+    {
+        return is_string($value) || is_int($value) ? (string) $value : null;
     }
 
     /**
