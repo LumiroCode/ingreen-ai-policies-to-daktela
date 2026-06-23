@@ -14,6 +14,7 @@ Small plain PHP app that accepts a Daktela ticket id from the `ticket` query par
 composer dump-autoload
 cp config/app.example.php config/app.php
 cp credentials/daktela-credentails.example.php credentials/daktela-credentails.php
+cp credentials/claude-api-key.example.php credentials/claude-api-key.php
 ```
 
 Edit `config/app.php`:
@@ -41,7 +42,17 @@ $daktelaAccessToken = 'your-token';
 return $daktelaAccessToken;
 ```
 
-The app does not read environment variables. Runtime configuration comes from `config/app.php`; the Daktela access token comes from `credentials/daktela-credentails.php`.
+Put the Claude API key in `credentials/claude-api-key.php`:
+
+```php
+<?php
+
+$claudeApiKey = 'your-claude-api-key';
+
+return $claudeApiKey;
+```
+
+The app does not read environment variables for its own runtime configuration. Runtime configuration comes from `config/app.php`; the Daktela access token comes from `credentials/daktela-credentails.php`; the Claude API key comes from `credentials/claude-api-key.php`.
 
 ## Run Locally
 
@@ -96,6 +107,18 @@ Only `.gitkeep` files are committed from `var/`; runtime contents are ignored.
 composer test
 ```
 
+## Policy Data Extraction
+
+The first extraction proof of concept is in `src/PolicyExtraction`. It exposes a small `PolicyDataExtractor` interface that accepts a local PDF path and returns car make, car model, value, and Claude's raw response.
+
+```php
+use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\AnthropicClaudeMessagesClient;
+use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\ClaudePolicyDataExtractor;
+
+$extractor = new ClaudePolicyDataExtractor(AnthropicClaudeMessagesClient::fromApiKey($config->claudeApiKey));
+$data = $extractor->extract('/path/to/policy.pdf');
+```
+
 ## Code Structure
 
 The app is intentionally small:
@@ -103,6 +126,7 @@ The app is intentionally small:
 - `public/index.php` wires configuration, logging, runtime directories, and the app.
 - `src/WebhookApp.php` handles the ticket query parameter and the ticket policy download workflow.
 - `src/TicketPdfAttachments.php` resolves PDF attachments related to a Daktela ticket.
+- `src/PolicyExtraction` contains the PDF-to-policy-data extraction interface and Claude implementation.
 - `src/Daktela/DaktelaClient.php` performs authenticated Daktela JSON and file requests.
 - `templates/pdf-attachments-table.php` renders the attachment list.
 - `src/Config`, `src/Logging`, and `src/Support` contain config loading, daily logs, and directory/error helpers.

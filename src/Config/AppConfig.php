@@ -11,10 +11,12 @@ final class AppConfig
     public const DEFAULT_MAX_DOWNLOAD_BYTES = 25_000_000;
     public const DEFAULT_APP_CONFIG_PATH = __DIR__ . '/../../config/app.php';
     public const DEFAULT_CREDENTIALS_PATH = __DIR__ . '/../../credentials/daktela-credentails.php';
+    public const DEFAULT_CLAUDE_CREDENTIALS_PATH = __DIR__ . '/../../credentials/claude-api-key.php';
 
     public function __construct(
         public readonly string $daktelaBaseUrl,
         public readonly string $daktelaApiToken,
+        public readonly ?string $claudeApiKey,
         public readonly string $varDir,
         public readonly string $cacheDir,
         public readonly int $maxDownloadBytes = self::DEFAULT_MAX_DOWNLOAD_BYTES,
@@ -25,7 +27,8 @@ final class AppConfig
 
     public static function fromFiles(
         string $appConfigPath = self::DEFAULT_APP_CONFIG_PATH,
-        string $credentialsPath = self::DEFAULT_CREDENTIALS_PATH
+        string $credentialsPath = self::DEFAULT_CREDENTIALS_PATH,
+        string $claudeCredentialsPath = self::DEFAULT_CLAUDE_CREDENTIALS_PATH
     ): self
     {
         $settings = self::loadAppConfig($appConfigPath);
@@ -33,6 +36,7 @@ final class AppConfig
         return new self(
             rtrim(self::requiredString($settings, 'daktelaBaseUrl', $appConfigPath), '/'),
             self::tokenFromCredentialsFile($credentialsPath),
+            self::optionalTokenFromCredentialsFile($claudeCredentialsPath, 'Claude API key', '$claudeApiKey'),
             self::requiredString($settings, 'varDir', $appConfigPath),
             self::requiredString($settings, 'cacheDir', $appConfigPath),
             isset($settings['maxDownloadBytes'])
@@ -112,6 +116,33 @@ final class AppConfig
         throw new AppException(500, 'invalid_credentials_file', 'Daktela credentials file must define a non-empty access token.', [
             'path' => $path,
             'expectedVariable' => '$daktelaAccessToken',
+        ]);
+    }
+
+    private static function optionalTokenFromCredentialsFile(string $path, string $label, string $expectedVariable): ?string
+    {
+        if (!is_file($path)) {
+            return null;
+        }
+
+        $claudeApiKey = null;
+        $credentials = require $path;
+
+        if (is_string($credentials) && trim($credentials) !== '') {
+            return trim($credentials);
+        }
+
+        if (is_array($credentials) && isset($credentials['apiKey']) && is_string($credentials['apiKey']) && trim($credentials['apiKey']) !== '') {
+            return trim($credentials['apiKey']);
+        }
+
+        if (is_string($claudeApiKey) && trim($claudeApiKey) !== '') {
+            return trim($claudeApiKey);
+        }
+
+        throw new AppException(500, 'invalid_credentials_file', $label . ' credentials file must define a non-empty token.', [
+            'path' => $path,
+            'expectedVariable' => $expectedVariable,
         ]);
     }
 

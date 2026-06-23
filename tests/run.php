@@ -6,8 +6,13 @@ use Ingreen\DaktelaPolicy\Config\AppConfig;
 use Ingreen\DaktelaPolicy\Daktela\DaktelaClient;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\Logging\DailyLogPaths;
+use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\ClaudeMessagesClient;
+use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\ClaudePolicyDataExtractor;
+use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataResponseParser;
 use Ingreen\DaktelaPolicy\TicketPdfAttachments;
 use Ingreen\DaktelaPolicy\WebhookApp;
+use Anthropic\Messages\DocumentBlockParam;
+use Anthropic\Messages\TextBlockParam;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -48,6 +53,23 @@ final class NullLogger extends AppLogger
 
     public function error(string $message, array $context = []): void
     {
+    }
+}
+
+final class FakeClaudeMessagesClient implements ClaudeMessagesClient
+{
+    /** @var list<array{model:string,maxTokens:int,messages:list<array{role:string,content:list<object>}>>> */
+    public array $requests = [];
+
+    public function __construct(private readonly string $response)
+    {
+    }
+
+    public function createMessage(string $model, int $maxTokens, array $messages): string
+    {
+        $this->requests[] = ['model' => $model, 'maxTokens' => $maxTokens, 'messages' => $messages];
+
+        return $this->response;
     }
 }
 
@@ -106,7 +128,7 @@ function tempDir(): string
 
 function app(FakeDaktela $fake, string $dir, ?string $allowedUtilityOrigin = null, ?string $utilitySecretKey = null): WebhookApp
 {
-    $config = new AppConfig('https://daktela.example', 'api-token', $dir . '/var', $dir . '/cache', 1_000_000, $allowedUtilityOrigin, $utilitySecretKey);
+    $config = new AppConfig('https://daktela.example', 'api-token', null, $dir . '/var', $dir . '/cache', 1_000_000, $allowedUtilityOrigin, $utilitySecretKey);
 
     $logger = new NullLogger();
     $daktela = new DaktelaClient($config->daktelaBaseUrl, $config->daktelaApiToken, $fake);
@@ -580,6 +602,7 @@ test('app config loads from PHP config files', function (): void {
     $dir = tempDir();
     $appConfig = $dir . '/app.php';
     $credentials = $dir . '/daktela-credentails.php';
+    $claudeCredentials = $dir . '/claude-api-key.php';
 
     file_put_contents($appConfig, <<<'PHP'
 <?php
@@ -595,11 +618,17 @@ PHP);
 $daktelaAccessToken = 'token-from-file';
 return $daktelaAccessToken;
 PHP);
+    file_put_contents($claudeCredentials, <<<'PHP'
+<?php
+$claudeApiKey = 'claude-key-from-file';
+return $claudeApiKey;
+PHP);
 
-    $config = AppConfig::fromFiles($appConfig, $credentials);
+    $config = AppConfig::fromFiles($appConfig, $credentials, $claudeCredentials);
 
     assertSameValue('https://daktela.example', $config->daktelaBaseUrl);
     assertSameValue('token-from-file', $config->daktelaApiToken);
+    assertSameValue('claude-key-from-file', $config->claudeApiKey);
     assertSameValue('/tmp/app-var', $config->varDir);
     assertSameValue('/tmp/cache', $config->cacheDir);
     assertSameValue(12345, $config->maxDownloadBytes);
@@ -646,6 +675,37 @@ test('app logger writes JSON lines to configured log file', function (): void {
     assertSameValue('info', $payload['level']);
     assertSameValue('Test log message.', $payload['message']);
     assertSameValue('abc', $payload['context']['requestId']);
+});
+
+test('policy data parser maps Claude JSON response to extracted policy data', function (): void {
+    $data = (new PolicyDataResponseParser())->parse('```json
+{"car_make":"Toyota","car_model":"Corolla","value":"123 000 PLN"}
+```');
+
+    assertSameValue('Toyota', $data->carMake);
+    assertSameValue('Corolla', $data->carModel);
+    assertSameValue('123 000 PLN', $data->value);
+});
+
+test('Claude policy extractor sends PDF document and prompt to Claude client', function (): void {
+    $dir = tempDir();
+    $pdfPath = $dir . '/policy.pdf';
+    file_put_contents($pdfPath, "%PDF-1.4\npolicy");
+
+    $client = new FakeClaudeMessagesClient('{"car_make":"Skoda","car_model":"Octavia","value":"50 000 CZK"}');
+    $extractor = new ClaudePolicyDataExtractor($client, new PolicyDataResponseParser(), 'claude-test-model', 256);
+
+    $data = $extractor->extract($pdfPath);
+
+    assertSameValue('Skoda', $data->carMake);
+    assertSameValue('Octavia', $data->carModel);
+    assertSameValue('50 000 CZK', $data->value);
+    assertSameValue('claude-test-model', $client->requests[0]['model']);
+    assertSameValue(256, $client->requests[0]['maxTokens']);
+    assertSameValue('user', $client->requests[0]['messages'][0]['role']);
+    assertTrueValue($client->requests[0]['messages'][0]['content'][0] instanceof DocumentBlockParam);
+    assertTrueValue($client->requests[0]['messages'][0]['content'][1] instanceof TextBlockParam);
+    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'car make'));
 });
 
 echo "\nAll tests passed.\n";

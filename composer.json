@@ -19,6 +19,8 @@
   "require": {
     "php": ">=8.2",
     "ext-curl": "*",
-    "ext-json": "*"
+    "ext-json": "*",
+    "anthropic-ai/sdk": "^0.30.0",
+    "guzzlehttp/guzzle": "^7"
   }
 }
