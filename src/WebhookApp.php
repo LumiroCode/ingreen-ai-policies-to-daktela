@@ -7,6 +7,8 @@ namespace Ingreen\DaktelaPolicy;
 use Ingreen\DaktelaPolicy\Config\AppConfig;
 use Ingreen\DaktelaPolicy\Daktela\DaktelaClient;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
+use Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData;
+use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataExtractor;
 use Ingreen\DaktelaPolicy\Support\AppException;
 use Throwable;
 
@@ -18,6 +20,7 @@ final class WebhookApp
         private readonly AppConfig $config,
         private readonly DaktelaClient $daktela,
         private readonly TicketPdfAttachments $ticketPdfAttachments,
+        private readonly PolicyDataExtractor $policyDataExtractor,
         private readonly AppLogger $logger
     ) {
     }
@@ -118,16 +121,26 @@ final class WebhookApp
                 'storedPath' => $path,
             ]);
 
+            $extractedData = $this->policyDataExtractor->extract($path);
+
+            $this->logger->info('Policy attachment processed with Claude extraction.', [
+                'requestId' => $requestId,
+                'entityType' => 'ticket',
+                'entityId' => $ticketId,
+                'attachmentFile' => $attachment['file'],
+                'storedPath' => $path,
+            ]);
+
             return [
                 'status' => 200,
                 'headers' => $this->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
                 'body' => $this->renderPdfAttachmentsTable($ticketId, $attachments, [
                     'type' => 'success',
-                    'text' => 'Plik polisy został zapisany tymczasowo.',
+                    'text' => $this->extractionResultJson($extractedData),
                 ]),
             ];
         } catch (AppException $exception) {
-            $this->logger->warning('Policy attachment could not be stored.', [
+            $this->logger->warning('Policy attachment could not be stored or processed.', [
                 'requestId' => $requestId,
                 'entityType' => 'ticket',
                 'entityId' => $ticketId,
@@ -140,7 +153,22 @@ final class WebhookApp
                 'headers' => $this->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
                 'body' => $this->renderPdfAttachmentsTable($ticketId, $attachments, [
                     'type' => 'error',
-                    'text' => 'Nie udało się zapisać pliku polisy. Spróbuj ponownie.',
+                    'text' => 'Nie udało się przetworzyć pliku polisy: ' . $exception->getMessage(),
+                ]),
+            ];
+        } catch (Throwable $exception) {
+            $this->logger->exception($exception, [
+                'requestId' => $requestId,
+                'entityType' => 'ticket',
+                'entityId' => $ticketId,
+            ]);
+
+            return [
+                'status' => 500,
+                'headers' => $this->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
+                'body' => $this->renderPdfAttachmentsTable($ticketId, $attachments, [
+                    'type' => 'error',
+                    'text' => 'Nie udało się przetworzyć pliku polisy: ' . $exception->getMessage(),
                 ]),
             ];
         }
@@ -187,6 +215,16 @@ final class WebhookApp
         $filename = $id !== '' ? $id : 'attachment-' . $attachmentIndex;
 
         return str_ends_with(strtolower($filename), '.pdf') ? $filename : $filename . '.pdf';
+    }
+
+    private function extractionResultJson(ExtractedPolicyData $data): string
+    {
+        return json_encode([
+            'car_make' => $data->carMake,
+            'car_model' => $data->carModel,
+            'value' => $data->value,
+            'raw_response' => $data->rawResponse,
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     }
 
     /**

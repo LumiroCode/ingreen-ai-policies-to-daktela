@@ -46,6 +46,8 @@ declare(strict_types=1);
             margin-top: 12px;
             padding: 10px 12px;
             max-width: 560px;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
         }
 
         .message.success {

@@ -6,6 +6,8 @@ use Ingreen\DaktelaPolicy\Config\AppConfig;
 use Ingreen\DaktelaPolicy\Daktela\DaktelaClient;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\Logging\DailyLogPaths;
+use Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData;
+use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataExtractor;
 use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\ClaudeMessagesClient;
 use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\ClaudePolicyDataExtractor;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataResponseParser;
@@ -73,6 +75,29 @@ final class FakeClaudeMessagesClient implements ClaudeMessagesClient
     }
 }
 
+final class FakePolicyDataExtractor implements PolicyDataExtractor
+{
+    /** @var list<string> */
+    public array $paths = [];
+
+    public function __construct(
+        private readonly ?ExtractedPolicyData $response = null,
+        private readonly ?Throwable $exception = null
+    ) {
+    }
+
+    public function extract(string $pdfPath): ExtractedPolicyData
+    {
+        $this->paths[] = $pdfPath;
+
+        if ($this->exception !== null) {
+            throw $this->exception;
+        }
+
+        return $this->response ?? new ExtractedPolicyData('Skoda', 'Octavia', '50 000 CZK', '{"car_make":"Skoda","car_model":"Octavia","value":"50 000 CZK"}');
+    }
+}
+
 /**
  * @param callable(): void $test
  */
@@ -126,14 +151,14 @@ function tempDir(): string
     return $dir;
 }
 
-function app(FakeDaktela $fake, string $dir, ?string $allowedUtilityOrigin = null, ?string $utilitySecretKey = null): WebhookApp
+function app(FakeDaktela $fake, string $dir, ?string $allowedUtilityOrigin = null, ?string $utilitySecretKey = null, ?PolicyDataExtractor $extractor = null): WebhookApp
 {
     $config = new AppConfig('https://daktela.example', 'api-token', null, $dir . '/var', $dir . '/cache', 1_000_000, $allowedUtilityOrigin, $utilitySecretKey);
 
     $logger = new NullLogger();
     $daktela = new DaktelaClient($config->daktelaBaseUrl, $config->daktelaApiToken, $fake);
 
-    return new WebhookApp($config, $daktela, new TicketPdfAttachments($daktela, $logger), $logger);
+    return new WebhookApp($config, $daktela, new TicketPdfAttachments($daktela, $logger), $extractor ?? new FakePolicyDataExtractor(), $logger);
 }
 
 function accessTokenFromHtml(string $html): string
@@ -471,7 +496,9 @@ test('configured utility origin allows signed in-app attachment request', functi
 
     assertSameValue(200, $download['status']);
     assertSameValue('text/html; charset=UTF-8', $download['headers']['Content-Type']);
-    assertTrueValue(str_contains($download['body'], 'Plik polisy został zapisany tymczasowo.'));
+    assertTrueValue(str_contains($download['body'], '&quot;car_make&quot;:&quot;Skoda&quot;'));
+    assertTrueValue(str_contains($download['body'], '&quot;car_model&quot;:&quot;Octavia&quot;'));
+    assertTrueValue(str_contains($download['body'], '&quot;value&quot;:&quot;50 000 CZK&quot;'));
     assertSameValue("%PDF-1.4\nbody", file_get_contents($dir . '/var/tmp/policies/files_scan.pdf'));
 });
 
@@ -570,7 +597,9 @@ test('selected PDF attachment is stored only after clicking read', function (): 
 
     assertSameValue(200, $download['status']);
     assertSameValue('text/html; charset=UTF-8', $download['headers']['Content-Type']);
-    assertTrueValue(str_contains($download['body'], 'Plik polisy został zapisany tymczasowo.'));
+    assertTrueValue(str_contains($download['body'], '&quot;car_make&quot;:&quot;Skoda&quot;'));
+    assertTrueValue(str_contains($download['body'], '&quot;car_model&quot;:&quot;Octavia&quot;'));
+    assertTrueValue(str_contains($download['body'], '&quot;value&quot;:&quot;50 000 CZK&quot;'));
     assertSameValue("%PDF-1.4\nsecond", file_get_contents($dir . '/var/tmp/policies/policy-456.pdf'));
     assertSameValue(['second'], $downloads);
 });
@@ -595,7 +624,31 @@ test('selected PDF attachment storage error renders message under table', functi
     assertSameValue(502, $response['status']);
     assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
     assertTrueValue(str_contains($response['body'], '<td>not-pdf.pdf</td>'));
-    assertTrueValue(str_contains($response['body'], 'Nie udało się zapisać pliku polisy. Spróbuj ponownie.'));
+    assertTrueValue(str_contains($response['body'], 'Nie udało się przetworzyć pliku polisy:'));
+});
+
+test('selected PDF attachment extraction error renders message under table', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/policy.pdf', 'title' => 'policy.pdf', 'type' => 'application/pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/files/policy.pdf' => pdfResponse(),
+    ]);
+
+    $response = app($fake, tempDir(), extractor: new FakePolicyDataExtractor(exception: new RuntimeException('Claude unavailable')))
+        ->handle('123', '0');
+
+    assertSameValue(500, $response['status']);
+    assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
+    assertTrueValue(str_contains($response['body'], '<td>policy.pdf</td>'));
+    assertTrueValue(str_contains($response['body'], 'Nie udało się przetworzyć pliku polisy: Claude unavailable'));
 });
 
 test('app config loads from PHP config files', function (): void {

@@ -6,6 +6,8 @@ use Ingreen\DaktelaPolicy\Config\AppConfig;
 use Ingreen\DaktelaPolicy\Daktela\DaktelaClient;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\Logging\DailyLogPaths;
+use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\AnthropicClaudeMessagesClient;
+use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\ClaudePolicyDataExtractor;
 use Ingreen\DaktelaPolicy\Support\AppException;
 use Ingreen\DaktelaPolicy\Support\DirectoryPreparer;
 use Ingreen\DaktelaPolicy\TicketPdfAttachments;
@@ -31,6 +33,7 @@ try {
         $config,
         $daktela,
         new TicketPdfAttachments($daktela, $logger),
+        new ClaudePolicyDataExtractor(AnthropicClaudeMessagesClient::fromApiKey($config->claudeApiKey)),
         $logger
     );
 
