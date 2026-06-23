@@ -12,6 +12,8 @@ use Throwable;
 
 final class WebhookApp
 {
+    private const ACCESS_TOKEN_TTL_SECONDS = 900;
+
     public function __construct(
         private readonly AppConfig $config,
         private readonly DaktelaClient $daktela,
@@ -23,12 +25,13 @@ final class WebhookApp
     /**
      * @return array{status:int,headers:array<string,string>,body:string}
      */
-    public function handle(?string $ticketId, ?string $attachmentIndex): array
+    public function handle(?string $ticketId, ?string $attachmentIndex, ?string $accessToken = null, ?string $referrer = null): array
     {
         $requestId = bin2hex(random_bytes(8));
 
         try {
             $ticketId = $this->requiredTicketId($ticketId);
+            $this->assertAccessAllowed($ticketId, $accessToken, $referrer);
 
             if ($attachmentIndex !== null && trim($attachmentIndex) !== '') {
                 return $this->downloadSelectedTicketPdf($ticketId, $attachmentIndex, $requestId);
@@ -44,7 +47,7 @@ final class WebhookApp
 
             return [
                 'status' => $exception->statusCode(),
-                'headers' => ['Content-Type' => 'application/json'],
+                'headers' => $this->securityHeaders(['Content-Type' => 'application/json']),
                 'body' => json_encode([
                     'requestId' => $requestId,
                     'error' => [
@@ -59,7 +62,7 @@ final class WebhookApp
 
             return [
                 'status' => 500,
-                'headers' => ['Content-Type' => 'application/json'],
+                'headers' => $this->securityHeaders(['Content-Type' => 'application/json']),
                 'body' => json_encode([
                     'requestId' => $requestId,
                     'error' => ['code' => 'internal_error', 'message' => 'Internal server error.'],
@@ -75,7 +78,7 @@ final class WebhookApp
     {
         return [
             'status' => 200,
-            'headers' => ['Content-Type' => 'text/html; charset=UTF-8'],
+            'headers' => $this->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
             'body' => $this->renderPdfAttachmentsTable($ticketId, $this->ticketPdfAttachments->forTicket($ticketId)),
         ];
     }
@@ -106,10 +109,10 @@ final class WebhookApp
 
         return [
             'status' => 200,
-            'headers' => [
+            'headers' => $this->securityHeaders([
                 'Content-Type' => 'application/pdf',
                 'Content-Disposition' => 'inline; filename="' . $this->downloadFilename($attachment) . '"',
-            ],
+            ]),
             'body' => $download['body'],
         ];
     }
@@ -119,6 +122,7 @@ final class WebhookApp
      */
     private function renderPdfAttachmentsTable(string $ticketId, array $attachments): string
     {
+        $accessToken = $this->accessTokenForTicket($ticketId);
         ob_start();
         require dirname(__DIR__) . '/templates/pdf-attachments-table.php';
         return (string) ob_get_clean();
@@ -131,6 +135,101 @@ final class WebhookApp
         }
 
         return trim($ticketId);
+    }
+
+    private function assertAccessAllowed(string $ticketId, ?string $accessToken, ?string $referrer): void
+    {
+        if ($this->config->allowedUtilityOrigin === null) {
+            return;
+        }
+
+        if ($accessToken !== null && $this->isValidAccessToken($ticketId, $accessToken)) {
+            return;
+        }
+
+        if ($referrer !== null && $this->isAllowedReferrer($referrer)) {
+            return;
+        }
+
+        throw new AppException(403, 'forbidden_utility_origin', 'This utility is only available from the configured Daktela URL.', [
+            'allowedOrigin' => $this->config->allowedUtilityOrigin,
+        ]);
+    }
+
+    private function isAllowedReferrer(string $referrer): bool
+    {
+        $allowed = parse_url($this->config->allowedUtilityOrigin ?? '');
+        $actual = parse_url($referrer);
+
+        if (!is_array($allowed) || !is_array($actual)) {
+            return false;
+        }
+
+        return strtolower((string) ($actual['scheme'] ?? '')) === strtolower((string) ($allowed['scheme'] ?? ''))
+            && strtolower((string) ($actual['host'] ?? '')) === strtolower((string) ($allowed['host'] ?? ''))
+            && (int) ($actual['port'] ?? self::defaultPort((string) ($actual['scheme'] ?? ''))) === (int) ($allowed['port'] ?? self::defaultPort((string) ($allowed['scheme'] ?? '')));
+    }
+
+    private static function defaultPort(string $scheme): int
+    {
+        return strtolower($scheme) === 'http' ? 80 : 443;
+    }
+
+    private function accessTokenForTicket(string $ticketId): string
+    {
+        $payload = $this->base64UrlEncode(json_encode([
+            'ticket' => $ticketId,
+            'expires' => time() + self::ACCESS_TOKEN_TTL_SECONDS,
+        ], JSON_THROW_ON_ERROR));
+
+        return $payload . '.' . $this->accessTokenSignature($payload);
+    }
+
+    private function isValidAccessToken(string $ticketId, string $token): bool
+    {
+        $parts = explode('.', $token, 2);
+
+        if (count($parts) !== 2 || !hash_equals($this->accessTokenSignature($parts[0]), $parts[1])) {
+            return false;
+        }
+
+        $payload = json_decode($this->base64UrlDecode($parts[0]), true);
+
+        return is_array($payload)
+            && ($payload['ticket'] ?? null) === $ticketId
+            && is_int($payload['expires'] ?? null)
+            && $payload['expires'] >= time();
+    }
+
+    private function accessTokenSignature(string $payload): string
+    {
+        return hash_hmac('sha256', $payload, $this->config->daktelaApiToken);
+    }
+
+    private function base64UrlEncode(string $value): string
+    {
+        return rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
+    }
+
+    private function base64UrlDecode(string $value): string
+    {
+        return base64_decode(strtr($value, '-_', '+/'), true) ?: '';
+    }
+
+    /**
+     * @param array<string,string> $headers
+     * @return array<string,string>
+     */
+    private function securityHeaders(array $headers): array
+    {
+        $headers['X-Content-Type-Options'] = 'nosniff';
+        $headers['Referrer-Policy'] = 'same-origin';
+
+        if ($this->config->allowedUtilityOrigin !== null) {
+            $headers['Content-Security-Policy'] = "frame-ancestors " . $this->config->allowedUtilityOrigin;
+        }
+
+        return $headers;
     }
 
     /**

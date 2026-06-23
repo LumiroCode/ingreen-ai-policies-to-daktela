@@ -26,6 +26,7 @@ return [
     'varDir' => __DIR__ . '/../var',
     'cacheDir' => __DIR__ . '/../var/cache',
     'maxDownloadBytes' => 25_000_000,
+    'allowedUtilityOrigin' => 'https://ingreen.daktela.com',
 ];
 ```
 
@@ -54,6 +55,22 @@ curl 'http://127.0.0.1:8080?ticket=123'
 ```
 
 The ticket URL returns an HTML table with PDF attachments. The `odczytaj` button requests the selected attachment and returns it inline as `application/pdf`.
+
+## Daktela Utility Access Restriction
+
+Set `allowedUtilityOrigin` to the Daktela origin that is allowed to load this app:
+
+```php
+'allowedUtilityOrigin' => 'https://ingreen.daktela.com',
+```
+
+When configured, the app:
+
+- rejects initial browser requests unless their referrer origin is `https://ingreen.daktela.com`;
+- sends `Content-Security-Policy: frame-ancestors https://ingreen.daktela.com` so browsers will not embed it on other sites;
+- signs the rendered `odczytaj` actions with a short-lived ticket-specific HMAC token, so follow-up PDF requests from inside the utility do not depend on same-page referrer behavior.
+
+This is a browser access control. It reliably blocks normal direct browser use and third-party embedding, but HTTP clients can forge `Referer`. For protection against scripted clients, Daktela would need to include a server-verifiable signature or shared secret in the utility URL.
 
 ## Runtime Files
 

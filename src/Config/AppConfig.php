@@ -17,7 +17,9 @@ final class AppConfig
         public readonly string $daktelaApiToken,
         public readonly string $varDir,
         public readonly string $cacheDir,
-        public readonly int $maxDownloadBytes = self::DEFAULT_MAX_DOWNLOAD_BYTES
+        public readonly int $maxDownloadBytes = self::DEFAULT_MAX_DOWNLOAD_BYTES,
+        public readonly ?string $allowedUtilityOrigin = null,
+        public readonly ?string $utilitySecretKey = null
     ) {
     }
 
@@ -35,7 +37,13 @@ final class AppConfig
             self::requiredString($settings, 'cacheDir', $appConfigPath),
             isset($settings['maxDownloadBytes'])
                 ? self::positiveInt($settings['maxDownloadBytes'], 'maxDownloadBytes', $appConfigPath)
-                : self::DEFAULT_MAX_DOWNLOAD_BYTES
+                : self::DEFAULT_MAX_DOWNLOAD_BYTES,
+            isset($settings['allowedUtilityOrigin'])
+                ? rtrim(self::requiredString($settings, 'allowedUtilityOrigin', $appConfigPath), '/')
+                : null,
+            isset($settings['utilitySecretKey'])
+                ? self::requiredString($settings, 'utilitySecretKey', $appConfigPath)
+                : null
         );
     }
 

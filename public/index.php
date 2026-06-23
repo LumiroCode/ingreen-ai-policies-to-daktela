@@ -34,7 +34,12 @@ try {
         $logger
     );
 
-    sendResponse($app->handle($_GET['ticket'] ?? null, $_GET['attachment'] ?? null));
+    sendResponse($app->handle(
+        queryStringParam('ticket'),
+        queryStringParam('attachment'),
+        queryStringParam('access_token'),
+        $_SERVER['HTTP_REFERER'] ?? null
+    ));
 } catch (AppException $exception) {
     sendJson(['status' => $exception->statusCode(), 'body' => [
         'error' => [
@@ -51,6 +56,13 @@ try {
             'message' => 'Internal server error.',
         ],
     ]]);
+}
+
+function queryStringParam(string $name): ?string
+{
+    $value = $_GET[$name] ?? null;
+
+    return is_string($value) ? $value : null;
 }
 
 /**

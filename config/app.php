@@ -7,4 +7,6 @@ return [
     'varDir' => __DIR__ . '/../var',
     'cacheDir' => __DIR__ . '/../var/cache',
     'maxDownloadBytes' => 150_000_000,
+    'allowedUtilityOrigin' => 'https://ingreen.daktela.com',
+    'utilitySecretKey' => 'CHANGE_ME_TO_A_LONG_RANDOM_SECRET',
 ];

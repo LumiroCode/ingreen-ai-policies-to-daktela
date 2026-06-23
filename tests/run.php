@@ -104,14 +104,23 @@ function tempDir(): string
     return $dir;
 }
 
-function app(FakeDaktela $fake, string $dir): WebhookApp
+function app(FakeDaktela $fake, string $dir, ?string $allowedUtilityOrigin = null): WebhookApp
 {
-    $config = new AppConfig('https://daktela.example', 'api-token', $dir . '/var', $dir . '/cache', 1_000_000);
+    $config = new AppConfig('https://daktela.example', 'api-token', $dir . '/var', $dir . '/cache', 1_000_000, $allowedUtilityOrigin);
 
     $logger = new NullLogger();
     $daktela = new DaktelaClient($config->daktelaBaseUrl, $config->daktelaApiToken, $fake);
 
     return new WebhookApp($config, $daktela, new TicketPdfAttachments($daktela, $logger), $logger);
+}
+
+function accessTokenFromHtml(string $html): string
+{
+    if (preg_match('/name="access_token" value="([^"]+)"/', $html, $matches) !== 1) {
+        throw new RuntimeException('Expected rendered access token.');
+    }
+
+    return html_entity_decode($matches[1], ENT_QUOTES, 'UTF-8');
 }
 
 /**
@@ -150,6 +159,7 @@ test('app rejects empty ticket query parameter', function (): void {
 test('ticket without attachments returns 404', function (): void {
     $fake = new FakeDaktela([
         '/api/v6/tickets/123' => jsonResponse(['result' => ['name' => '123', 'has_attachment' => false]]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
     ]);
     $response = app($fake, tempDir())->handle('123', null);
     $payload = errorBody($response);
@@ -172,7 +182,7 @@ test('ticket PDF list renders table and does not download files', function (): v
                 ],
             ],
         ]),
-        '/api/v6/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
         '/files/scan.pdf' => function () use (&$downloadCount): array {
             $downloadCount++;
             return pdfResponse();
@@ -191,6 +201,102 @@ test('ticket PDF list renders table and does not download files', function (): v
     assertTrueValue(str_contains($response['body'], '<td>policy.pdf</td>'));
     assertTrueValue(!str_contains($response['body'], 'readme.txt'));
     assertSameValue(0, $downloadCount);
+});
+
+test('ticket PDF list includes PDFs from ticket activities attachments', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => false,
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse([
+            'result' => [
+                'data' => [
+                    [
+                        'name' => 'activity-1',
+                        'attachments' => [
+                            ['file' => '/files/readme.txt', 'title' => 'readme.txt', 'type' => 'text/plain'],
+                            ['file' => '/files/activity-first.pdf', 'title' => 'activity-first.pdf'],
+                        ],
+                    ],
+                    [
+                        'name' => 'activity-2',
+                        'attachments' => [
+                            ['file' => '/files/activity-second.bin', 'title' => 'activity-second.pdf', 'type' => 'application/pdf'],
+                        ],
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+
+    $response = app($fake, tempDir())->handle('123', null);
+    $requestPaths = array_map(
+        static fn (array $request): string => parse_url($request['url'], PHP_URL_PATH) ?: '',
+        $fake->requests
+    );
+
+    assertSameValue(200, $response['status']);
+    assertTrueValue(str_contains($response['body'], '<td>activity-first.pdf</td>'));
+    assertTrueValue(str_contains($response['body'], '<td>activity-second.pdf</td>'));
+    assertTrueValue(!str_contains($response['body'], 'readme.txt'));
+    assertTrueValue(in_array('/api/v6/tickets/123/activities', $requestPaths, true));
+    assertTrueValue(!in_array('/api/v6/activities', $requestPaths, true));
+});
+
+test('configured utility origin rejects direct browser entry requests', function (): void {
+    $response = app(new FakeDaktela([]), tempDir(), 'https://ingreen.daktela.com')->handle('123', null);
+    $payload = errorBody($response);
+
+    assertSameValue(403, $response['status']);
+    assertSameValue('forbidden_utility_origin', $payload['error']['code']);
+    assertSameValue('https://ingreen.daktela.com', $payload['error']['details']['allowedOrigin']);
+});
+
+test('configured utility origin allows Daktela referrer and sets frame policy', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/scan.pdf', 'title' => 'scan.pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+    ]);
+
+    $response = app($fake, tempDir(), 'https://ingreen.daktela.com')
+        ->handle('123', null, null, 'https://ingreen.daktela.com/tickets/123');
+
+    assertSameValue(200, $response['status']);
+    assertSameValue('frame-ancestors https://ingreen.daktela.com', $response['headers']['Content-Security-Policy']);
+    assertTrueValue(str_contains($response['body'], 'name="access_token"'));
+});
+
+test('configured utility origin allows signed in-app attachment request', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/scan.pdf', 'title' => 'scan.pdf', 'type' => 'application/pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/files/scan.pdf' => pdfResponse(),
+    ]);
+    $app = app($fake, tempDir(), 'https://ingreen.daktela.com');
+    $list = $app->handle('123', null, null, 'https://ingreen.daktela.com/tickets/123');
+    $download = $app->handle('123', '0', accessTokenFromHtml($list['body']), 'https://app.example/?ticket=123');
+
+    assertSameValue(200, $download['status']);
+    assertSameValue('application/pdf', $download['headers']['Content-Type']);
 });
 
 test('downloader handles relative Daktela file path', function (): void {
@@ -225,7 +331,7 @@ test('selected PDF attachment is downloaded only after clicking read', function 
                 ],
             ],
         ]),
-        '/api/v6/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
         '/files/first.pdf' => function () use (&$downloads): array {
             $downloads[] = 'first';
             return pdfResponse("%PDF-1.4\nfirst");

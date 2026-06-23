@@ -22,14 +22,15 @@ final class TicketPdfAttachments
     public function forTicket(string $ticketId): array
     {
         $ticket = $this->resultObject($this->daktela->getJson('/api/v6/tickets/' . rawurlencode($ticketId)));
+        $activityAttachments = $this->ticketActivityAttachments($ticketId);
 
-        if (($ticket['has_attachment'] ?? null) === false) {
+        if (($ticket['has_attachment'] ?? null) === false && $activityAttachments === []) {
             throw new AppException(404, 'ticket_has_no_attachment', 'Ticket has no attachment.', ['entityId' => $ticketId]);
         }
 
         return $this->pdfAttachments($this->uniqueAttachments(array_merge(
             $this->collectAttachments($ticket, 'ticket'),
-            $this->ticketActivityAttachments($ticketId)
+            $activityAttachments
         )));
     }
 
@@ -62,12 +63,12 @@ final class TicketPdfAttachments
     private function ticketActivityAttachments(string $ticketId): array
     {
         try {
-            $payload = $this->daktela->getJson('/api/v6/activities', [
+            $payload = $this->daktela->getJson('/api/v6/tickets/' . rawurlencode($ticketId) . '/activities', [
                 'pageSize' => 100,
                 'sort' => [['field' => 'time', 'dir' => 'desc']],
             ]);
         } catch (AppException $exception) {
-            $this->logger->warning('Failed to scan Daktela activities for ticket attachments.', [
+            $this->logger->warning('Failed to fetch Daktela ticket activities for attachments.', [
                 'ticketId' => $ticketId,
                 'errorCode' => $exception->errorCode(),
             ]);
@@ -79,38 +80,17 @@ final class TicketPdfAttachments
         $activities = $payload['result']['data'] ?? [];
 
         foreach (is_array($activities) ? $activities : [] as $activity) {
-            if (!is_array($activity) || !$this->activityBelongsToTicket($activity, $ticketId)) {
+            if (!is_array($activity)) {
                 continue;
             }
 
-            $attachments = array_merge($attachments, $this->collectAttachments($activity, 'activity'));
-
-            if (($activity['type'] ?? null) === 'EMAIL' && isset($activity['item'])) {
-                $attachments = array_merge($attachments, $this->emailAttachments((string) $activity['item']));
+            $activityAttachments = $activity['attachments'] ?? [];
+            if (is_array($activityAttachments)) {
+                $attachments = array_merge($attachments, $this->collectAttachments($activityAttachments, 'activity'));
             }
         }
 
         return $attachments;
-    }
-
-    /**
-     * @return list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null}>
-     */
-    private function emailAttachments(string $itemId): array
-    {
-        try {
-            return $this->collectAttachments(
-                $this->resultObject($this->daktela->getJson('/api/v6/activitiesEmail/' . rawurlencode($itemId))),
-                'email_activity'
-            );
-        } catch (AppException $exception) {
-            $this->logger->warning('Failed to fetch Daktela email item while resolving attachments.', [
-                'itemId' => $itemId,
-                'errorCode' => $exception->errorCode(),
-            ]);
-
-            return [];
-        }
     }
 
     /**
@@ -191,15 +171,6 @@ final class TicketPdfAttachments
         }
 
         return $result;
-    }
-
-    /**
-     * @param array<string, mixed> $activity
-     */
-    private function activityBelongsToTicket(array $activity, string $ticketId): bool
-    {
-        $ticket = $activity['ticket'] ?? null;
-        return is_array($ticket) ? (string) ($ticket['name'] ?? '') === $ticketId : (string) $ticket === $ticketId;
     }
 
     /**
