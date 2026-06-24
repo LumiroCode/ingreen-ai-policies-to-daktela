@@ -48,7 +48,8 @@ final class WebhookApp
         ?array $policyData = null,
         ?array $policyLocked = null,
         ?string $ticketTitle = null,
-        bool $forceAttachmentRefresh = false
+        bool $forceAttachmentRefresh = false,
+        bool $servePolicyPdf = false
     ): array
     {
         $requestId = bin2hex(random_bytes(8));
@@ -63,6 +64,10 @@ final class WebhookApp
                 $daktelaTabDt,
                 $daktelaTabSig
             );
+
+            if ($servePolicyPdf) {
+                return $this->selectedPolicyPdfResponse($ticketId, $attachmentIndex, $requestId);
+            }
 
             if ($attachmentIndex !== null && trim($attachmentIndex) !== '') {
                 $confirmation = $confirmation !== null ? trim($confirmation) : null;
@@ -129,6 +134,57 @@ final class WebhookApp
                 ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
             ];
         }
+    }
+
+    /**
+     * @return array{status:int,headers:array<string,string>,body:string}
+     */
+    private function selectedPolicyPdfResponse(string $ticketId, ?string $attachmentIndex, string $requestId): array
+    {
+        if ($attachmentIndex === null || trim($attachmentIndex) === '') {
+            throw new AppException(400, 'invalid_request', 'Required attachment query parameter is missing.', ['field' => 'attachment']);
+        }
+
+        $attachments = $this->ticketPdfAttachments->forTicket($ticketId);
+        $attachment = $this->ticketPdfAttachments->byIndex($attachments, $attachmentIndex);
+        $path = $this->policyFilePath($attachment, $attachmentIndex);
+
+        if (!is_file($path)) {
+            $download = $this->daktela->download($attachment['file'], $this->config->maxDownloadBytes);
+
+            if (!$this->looksLikePdf($download['body'], $download['contentType'], $attachment)) {
+                throw new AppException(422, 'attachment_is_not_pdf', 'Downloaded attachment does not look like a PDF.', [
+                    'file' => $attachment['file'],
+                    'contentType' => $download['contentType'],
+                    'attachmentType' => $attachment['type'] ?? null,
+                ]);
+            }
+
+            $path = $this->storePolicyFile($attachment, $attachmentIndex, $download['body']);
+
+            $this->logger->info('Policy attachment stored for PDF preview.', [
+                'requestId' => $requestId,
+                'entityType' => 'ticket',
+                'entityId' => $ticketId,
+                'attachmentFile' => $attachment['file'],
+                'storedPath' => $path,
+            ]);
+        }
+
+        $body = file_get_contents($path);
+
+        if ($body === false) {
+            throw new AppException(500, 'policy_pdf_not_readable', 'Policy PDF file is not readable.', ['path' => $path]);
+        }
+
+        return [
+            'status' => 200,
+            'headers' => $this->accessGuard->securityHeaders([
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . addcslashes($this->downloadFilename($attachment), "\\\"") . '"',
+            ]),
+            'body' => $body,
+        ];
     }
 
     /**
@@ -215,7 +271,7 @@ final class WebhookApp
                 ]);
             }
 
-            $path = $this->storeTemporaryPolicyFile($attachment, $attachmentIndex, $download['body']);
+            $path = $this->storePolicyFile($attachment, $attachmentIndex, $download['body']);
 
             $this->logger->info('Policy attachment stored for Claude extraction.', [
                 'requestId' => $requestId,
@@ -377,9 +433,9 @@ final class WebhookApp
     /**
      * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
      */
-    private function storeTemporaryPolicyFile(array $attachment, string $attachmentIndex, string $body): string
+    private function storePolicyFile(array $attachment, string $attachmentIndex, string $body): string
     {
-        $directory = rtrim($this->config->varDir, '/\\') . '/tmp/policies';
+        $directory = rtrim($this->config->varDir, '/\\') . '/policies';
 
         if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
             throw new AppException(500, 'policy_temp_dir_failed', 'Could not create temporary policy directory.', [
@@ -387,7 +443,7 @@ final class WebhookApp
             ]);
         }
 
-        $path = $directory . '/' . $this->temporaryPolicyFilename($attachment, $attachmentIndex);
+        $path = $this->policyFilePath($attachment, $attachmentIndex);
 
         if (file_put_contents($path, $body, LOCK_EX) === false) {
             throw new AppException(500, 'policy_temp_write_failed', 'Could not write temporary policy file.', [
@@ -396,6 +452,14 @@ final class WebhookApp
         }
 
         return $path;
+    }
+
+    /**
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     */
+    private function policyFilePath(array $attachment, string $attachmentIndex): string
+    {
+        return rtrim($this->config->varDir, '/\\') . '/policies/' . $this->temporaryPolicyFilename($attachment, $attachmentIndex);
     }
 
     /**
@@ -485,7 +549,6 @@ final class WebhookApp
     ): string
     {
         $accessToken = $this->accessGuard->accessTokenForTicket($ticketId);
-        $daktelaBaseUrl = $this->config->daktelaBaseUrl;
         $ticketTitle = $this->displayTicketTitle($ticketId, $ticketTitle);
         ob_start();
         require dirname(__DIR__) . '/templates/page.php';

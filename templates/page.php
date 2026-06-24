@@ -5,19 +5,22 @@ declare(strict_types=1);
 /**
  * @var string $ticketId
  * @var string $ticketTitle
- * @var string $daktelaBaseUrl
+ * @var string $accessToken
  * @var array{type:string,text:string}|null $message
  * @var list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
  * @var string|null $selectedAttachmentIndex
  */
 
+$previewAttachmentIndex = null;
 $previewAttachment = null;
 
 if ($selectedAttachmentIndex !== null && ctype_digit($selectedAttachmentIndex)) {
-    $previewAttachment = $attachments[(int) $selectedAttachmentIndex] ?? null;
+    $previewAttachmentIndex = (int) $selectedAttachmentIndex;
+    $previewAttachment = $attachments[$previewAttachmentIndex] ?? null;
 }
 
 if ($previewAttachment === null) {
+    $previewAttachmentIndex = 0;
     $previewAttachment = $attachments[0] ?? null;
 }
 
@@ -25,55 +28,13 @@ $previewAttachmentTitle = is_array($previewAttachment)
     ? (string) ($previewAttachment['title'] ?? basename((string) $previewAttachment['file']))
     : null;
 
-$previewAttachmentUrl = static function (string $file, string $daktelaBaseUrl): string {
-    if (parse_url($file, PHP_URL_SCHEME) === null) {
-        $file = rtrim($daktelaBaseUrl, '/') . '/' . ltrim($file, '/');
-    }
-
-    $parts = parse_url($file);
-
-    if ($parts === false) {
-        return $file;
-    }
-
-    $query = [];
-    parse_str($parts['query'] ?? '', $query);
-    $query['download'] = '0';
-    $queryString = http_build_query($query);
-
-    $url = '';
-
-    if (isset($parts['scheme'])) {
-        $url .= $parts['scheme'] . '://';
-    }
-
-    if (isset($parts['user'])) {
-        $url .= $parts['user'];
-
-        if (isset($parts['pass'])) {
-            $url .= ':' . $parts['pass'];
-        }
-
-        $url .= '@';
-    }
-
-    if (isset($parts['host'])) {
-        $url .= $parts['host'];
-    }
-
-    if (isset($parts['port'])) {
-        $url .= ':' . $parts['port'];
-    }
-
-    $url .= $parts['path'] ?? '';
-    $url .= $queryString !== '' ? '?' . $queryString : '';
-    $url .= isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
-
-    return $url;
-};
-
 $previewUrl = is_array($previewAttachment)
-    ? $previewAttachmentUrl((string) $previewAttachment['file'], $daktelaBaseUrl)
+    ? '?' . http_build_query([
+        'ticket' => $ticketId,
+        'attachment' => (string) $previewAttachmentIndex,
+        'access_token' => $accessToken,
+        'policy_pdf' => '1',
+    ])
     : null;
 
 ?>

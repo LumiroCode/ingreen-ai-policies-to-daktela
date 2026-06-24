@@ -615,9 +615,13 @@ test('selected email activity attachment downloads through Daktela file mapper',
     assertSameValue('1', $query['download']);
     assertTrueValue(str_contains(
         $download['body'],
-        'src="https://daktela.example/file/download?mapper=activitiesEmailFiles&amp;name=35869&amp;iconHash=Polisa_904001145228.pdf&amp;download=0"'
+        'src="?ticket=15242&amp;attachment=0&amp;access_token='
     ));
-    assertSameValue("%PDF-1.4\nmapped", file_get_contents($dir . '/var/tmp/policies/35869.pdf'));
+    assertTrueValue(str_contains(
+        $download['body'],
+        '&amp;policy_pdf=1"'
+    ));
+    assertSameValue("%PDF-1.4\nmapped", file_get_contents($dir . '/var/policies/35869.pdf'));
 });
 
 test('selected activity comment attachment downloads through activities comment mapper', function (): void {
@@ -655,7 +659,7 @@ test('selected activity comment attachment downloads through activities comment 
 
     assertSameValue(200, $download['status']);
     assertSameValue('https://daktela.example/file/download?mapper=activitiesComment&name=2023&iconHash=Faktura+FV+9_4_2026.pdf&download=1', $request['url']);
-    assertSameValue("%PDF-1.4\ncomment", file_get_contents($dir . '/var/tmp/policies/2023.pdf'));
+    assertSameValue("%PDF-1.4\ncomment", file_get_contents($dir . '/var/policies/2023.pdf'));
 });
 
 test('ticket PDF list includes PDFs from nested activity item attachments', function (): void {
@@ -859,7 +863,7 @@ test('configured utility origin allows signed in-app attachment request', functi
     assertTrueValue(str_contains($download['body'], 'name="confirmation"'));
     assertTrueValue(str_contains($download['body'], 'value="yes"'));
     assertTrueValue(str_contains($download['body'], 'value="no"'));
-    assertSameValue("%PDF-1.4\nbody", file_get_contents($dir . '/var/tmp/policies/files_scan.pdf'));
+    assertSameValue("%PDF-1.4\nbody", file_get_contents($dir . '/var/policies/files_scan.pdf'));
 });
 
 test('confirmed policy data loaded from cache is locked by default', function (): void {
@@ -1049,6 +1053,39 @@ test('daktela 401 maps to upstream auth error', function (): void {
     assertSameValue('daktela_auth_failed', $payload['error']['code']);
 });
 
+test('policy PDF preview is served from local policy storage', function (): void {
+    $dir = tempDir();
+    $downloads = 0;
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['id' => 'policy-123', 'file' => '/files/policy.pdf', 'title' => 'policy.pdf', 'type' => 'application/pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/files/policy.pdf' => function () use (&$downloads): array {
+            $downloads++;
+            return pdfResponse("%PDF-1.4\npreview");
+        },
+    ]);
+    $app = app($fake, $dir);
+
+    $preview = $app->handle('123', '0', daktelaAccessToken('123'), servePolicyPdf: true);
+    $cachedPreview = $app->handle('123', '0', daktelaAccessToken('123'), servePolicyPdf: true);
+
+    assertSameValue(200, $preview['status']);
+    assertSameValue('application/pdf', $preview['headers']['Content-Type']);
+    assertTrueValue(str_starts_with($preview['headers']['Content-Disposition'], 'inline;'));
+    assertSameValue("%PDF-1.4\npreview", $preview['body']);
+    assertSameValue("%PDF-1.4\npreview", $cachedPreview['body']);
+    assertSameValue("%PDF-1.4\npreview", file_get_contents($dir . '/var/policies/policy-123.pdf'));
+    assertSameValue(1, $downloads);
+});
+
 test('selected PDF attachment is stored only after clicking read', function (): void {
     $dir = tempDir();
     $downloads = [];
@@ -1079,8 +1116,9 @@ test('selected PDF attachment is stored only after clicking read', function (): 
 
     assertSameValue(200, $list['status']);
     assertSameValue([], $downloads);
-    assertTrueValue(str_contains($list['body'], 'src="https://daktela.example/files/first.pdf?download=0"'));
-    assertTrueValue(!is_file($dir . '/var/tmp/policies/policy-456.pdf'));
+    assertTrueValue(str_contains($list['body'], 'src="?ticket=123&amp;attachment=0&amp;access_token='));
+    assertTrueValue(str_contains($list['body'], '&amp;policy_pdf=1"'));
+    assertTrueValue(!is_file($dir . '/var/policies/policy-456.pdf'));
 
     $download = $app->handle('123', '1', daktelaAccessToken('123'));
 
@@ -1093,8 +1131,9 @@ test('selected PDF attachment is stored only after clicking read', function (): 
     assertTrueValue(str_contains($download['body'], 'value="Octavia"'));
     assertTrueValue(str_contains($download['body'], 'value="50 000 CZK"'));
     assertTrueValue(str_contains($download['body'], 'second.pdf'));
-    assertTrueValue(str_contains($download['body'], 'src="https://daktela.example/files/second.pdf?download=0"'));
-    assertSameValue("%PDF-1.4\nsecond", file_get_contents($dir . '/var/tmp/policies/policy-456.pdf'));
+    assertTrueValue(str_contains($download['body'], 'src="?ticket=123&amp;attachment=1&amp;access_token='));
+    assertTrueValue(str_contains($download['body'], '&amp;policy_pdf=1"'));
+    assertSameValue("%PDF-1.4\nsecond", file_get_contents($dir . '/var/policies/policy-456.pdf'));
     assertSameValue(['second'], $downloads);
 });
 

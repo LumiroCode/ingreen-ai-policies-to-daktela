@@ -49,7 +49,8 @@ try {
         queryArrayParam('policy_data'),
         queryArrayParam('policy_locked'),
         queryStringParam('title'),
-        queryBoolParam('refresh_attachments')
+        queryBoolParam('refresh_attachments'),
+        queryBoolParam('policy_pdf')
     ));
 } catch (AppException $exception) {
     sendJson(['status' => $exception->statusCode(), 'body' => [
