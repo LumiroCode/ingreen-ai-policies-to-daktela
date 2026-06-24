@@ -23,6 +23,14 @@ final class PolicyDataCache
     /**
      * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
      */
+    public function pending(string $ticketId, array $attachment): ?ExtractedPolicyData
+    {
+        return $this->read($this->path('pending', $ticketId, $attachment));
+    }
+
+    /**
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     */
     public function savePending(string $ticketId, array $attachment, ExtractedPolicyData $data): void
     {
         $this->write($this->path('pending', $ticketId, $attachment), $data);

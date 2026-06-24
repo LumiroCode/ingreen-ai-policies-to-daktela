@@ -176,6 +176,25 @@ final class WebhookApp
                         ),
                     ];
                 }
+
+                $pendingData = $this->policyDataCache->pending($ticketId, $attachment);
+
+                if ($pendingData !== null) {
+                    return [
+                        'status' => 200,
+                        'headers' => $this->accessGuard->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
+                        'body' => $this->renderPage(
+                            $ticketId,
+                            $attachments,
+                            [
+                                'type' => 'success',
+                                'text' => 'Wczytano dane z poprzedniego odczytu polisy. Sprawdź wartości przed zapisaniem do systemu.',
+                            ],
+                            $pendingData,
+                            $attachmentIndex
+                        ),
+                    ];
+                }
             }
 
             $download = $this->daktela->download($attachment['file'], $this->config->maxDownloadBytes);

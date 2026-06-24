@@ -807,6 +807,89 @@ test('confirmed policy data loaded from cache is locked by default', function ()
     );
 });
 
+test('pending policy data loaded from cache on read click', function (): void {
+    $dir = tempDir();
+    $downloadCount = 0;
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/scan.pdf', 'title' => 'scan.pdf', 'type' => 'application/pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/files/scan.pdf' => function () use (&$downloadCount): array {
+            $downloadCount++;
+            return pdfResponse();
+        },
+    ]);
+    $extractor = new FakePolicyDataExtractor(new ExtractedPolicyData('Toyota', 'Yaris', '10 000 EUR', '{"car_make":"Toyota","car_model":"Yaris","value":"10 000 EUR"}'));
+    $app = app($fake, $dir, extractor: $extractor);
+
+    $extracted = $app->handle('123', '0', daktelaAccessToken('123'));
+    $cached = $app->handle('123', '0', daktelaAccessToken('123'));
+
+    assertSameValue(200, $extracted['status']);
+    assertSameValue(200, $cached['status']);
+    assertSameValue(1, $downloadCount, 'Expected pending policy read not to download the attachment again.');
+    assertSameValue(1, count($extractor->paths), 'Expected pending policy read not to run extraction again.');
+    assertTrueValue(
+        str_contains($cached['body'], 'Wczytano dane z poprzedniego odczytu polisy.'),
+        'Expected policy data to be loaded from pending cache.'
+    );
+    assertTrueValue(str_contains($cached['body'], 'value="Toyota"'));
+    assertTrueValue(str_contains($cached['body'], 'value="Yaris"'));
+    assertTrueValue(str_contains($cached['body'], 'value="10 000 EUR"'));
+});
+
+test('policy reread after incorrectness claim ignores pending cache', function (): void {
+    $dir = tempDir();
+    $downloadCount = 0;
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/scan.pdf', 'title' => 'scan.pdf', 'type' => 'application/pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/files/scan.pdf' => function () use (&$downloadCount): array {
+            $downloadCount++;
+            return pdfResponse();
+        },
+    ]);
+    $extractor = new FakePolicyDataExtractor();
+    $app = app($fake, $dir, extractor: $extractor);
+
+    $extracted = $app->handle('123', '0', daktelaAccessToken('123'));
+    $reread = $app->handle(
+        '123',
+        '0',
+        daktelaAccessToken('123'),
+        confirmation: 'no',
+        policyData: [
+            'car_make' => 'Skoda',
+            'car_model' => 'Octavia',
+            'value' => '50 000 CZK',
+        ],
+        policyLocked: [
+            'car_make' => '1',
+        ]
+    );
+
+    assertSameValue(200, $extracted['status']);
+    assertSameValue(200, $reread['status']);
+    assertSameValue(2, $downloadCount, 'Expected incorrectness claim to download the attachment again.');
+    assertSameValue(2, count($extractor->paths), 'Expected incorrectness claim to run extraction again.');
+    assertTrueValue(str_contains($reread['body'], 'Dane polisy zostały odczytane przez AI.'));
+});
+
 test('configured utility key still requires Daktela tab signature', function (): void {
     $tab = daktelaTabParams('123');
     $fake = new FakeDaktela([
