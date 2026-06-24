@@ -80,6 +80,14 @@ $previewUrl = is_array($previewAttachment)
                             <p><?= htmlspecialchars($previewAttachmentTitle, ENT_QUOTES, 'UTF-8') ?></p>
                         <?php endif; ?>
                     </div>
+                    <?php if ($previewUrl !== null): ?>
+                        <a
+                            class="button secondary"
+                            href="<?= htmlspecialchars($previewUrl, ENT_QUOTES, 'UTF-8') ?>"
+                            target="_blank"
+                            rel="noopener"
+                        >Otwórz w nowym oknie</a>
+                    <?php endif; ?>
                 </div>
 
                 <?php if ($previewUrl !== null): ?>
