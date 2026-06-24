@@ -619,6 +619,10 @@ test('selected email activity attachment downloads through Daktela file mapper',
     ));
     assertTrueValue(str_contains(
         $download['body'],
+        'href="https://daktela.example/file/download?mapper=activitiesEmailFiles&amp;name=35869&amp;iconHash=Polisa_904001145228.pdf&amp;download=0"'
+    ));
+    assertTrueValue(str_contains(
+        $download['body'],
         '&amp;policy_pdf=1"'
     ));
     assertSameValue("%PDF-1.4\nmapped", file_get_contents($dir . '/var/policies/35869.pdf'));
@@ -1133,7 +1137,7 @@ test('selected PDF attachment is stored only after clicking read', function (): 
     assertTrueValue(str_contains($download['body'], 'value="50 000 CZK"'));
     assertTrueValue(str_contains($download['body'], 'second.pdf'));
     assertTrueValue(str_contains($download['body'], 'src="?ticket=123&amp;attachment=1&amp;access_token='));
-    assertTrueValue(str_contains($download['body'], 'href="?ticket=123&amp;attachment=1&amp;access_token='));
+    assertTrueValue(str_contains($download['body'], 'href="https://daktela.example/files/second.pdf?download=0"'));
     assertTrueValue(str_contains($download['body'], 'target="_blank"'));
     assertTrueValue(str_contains($download['body'], 'Otwórz w nowym oknie'));
     assertTrueValue(str_contains($download['body'], '&amp;policy_pdf=1"'));

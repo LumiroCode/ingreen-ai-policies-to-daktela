@@ -6,6 +6,7 @@ declare(strict_types=1);
  * @var string $ticketId
  * @var string $ticketTitle
  * @var string $accessToken
+ * @var string $daktelaBaseUrl
  * @var array{type:string,text:string}|null $message
  * @var list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
  * @var string|null $selectedAttachmentIndex
@@ -30,6 +31,57 @@ $previewUrl = is_array($previewAttachment)
         'access_token' => $accessToken,
         'policy_pdf' => '1',
     ])
+    : null;
+
+$daktelaPreviewUrl = static function (string $file, string $daktelaBaseUrl): string {
+    if (parse_url($file, PHP_URL_SCHEME) === null) {
+        $file = rtrim($daktelaBaseUrl, '/') . '/' . ltrim($file, '/');
+    }
+
+    $parts = parse_url($file);
+
+    if ($parts === false) {
+        return $file;
+    }
+
+    $query = [];
+    parse_str($parts['query'] ?? '', $query);
+    $query['download'] = '0';
+    $queryString = http_build_query($query);
+
+    $url = '';
+
+    if (isset($parts['scheme'])) {
+        $url .= $parts['scheme'] . '://';
+    }
+
+    if (isset($parts['user'])) {
+        $url .= $parts['user'];
+
+        if (isset($parts['pass'])) {
+            $url .= ':' . $parts['pass'];
+        }
+
+        $url .= '@';
+    }
+
+    if (isset($parts['host'])) {
+        $url .= $parts['host'];
+    }
+
+    if (isset($parts['port'])) {
+        $url .= ':' . $parts['port'];
+    }
+
+    $url .= $parts['path'] ?? '';
+    $url .= $queryString !== '' ? '?' . $queryString : '';
+    $url .= isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
+
+    return $url;
+};
+
+$openInDaktelaUrl = is_array($previewAttachment)
+    ? $daktelaPreviewUrl((string) $previewAttachment['file'], $daktelaBaseUrl)
     : null;
 
 ?>
@@ -80,10 +132,10 @@ $previewUrl = is_array($previewAttachment)
                             <p><?= htmlspecialchars($previewAttachmentTitle, ENT_QUOTES, 'UTF-8') ?></p>
                         <?php endif; ?>
                     </div>
-                    <?php if ($previewUrl !== null): ?>
+                    <?php if ($openInDaktelaUrl !== null): ?>
                         <a
                             class="button secondary"
-                            href="<?= htmlspecialchars($previewUrl, ENT_QUOTES, 'UTF-8') ?>"
+                            href="<?= htmlspecialchars($openInDaktelaUrl, ENT_QUOTES, 'UTF-8') ?>"
                             target="_blank"
                             rel="noopener"
                         >Otwórz w nowym oknie</a>
