@@ -47,12 +47,16 @@ final class FakeDaktela
 
 final class NullLogger extends AppLogger
 {
+    /** @var list<array{message:string,context:array<string,mixed>}> */
+    public array $warnings = [];
+
     public function info(string $message, array $context = []): void
     {
     }
 
     public function warning(string $message, array $context = []): void
     {
+        $this->warnings[] = ['message' => $message, 'context' => $context];
     }
 
     public function error(string $message, array $context = []): void
@@ -129,6 +133,13 @@ function assertTrueValue(bool $value, string $message = ''): void
     }
 }
 
+function assertArrayMissingKey(string $key, array $array, string $message = ''): void
+{
+    if (array_key_exists($key, $array)) {
+        throw new RuntimeException($message !== '' ? $message : 'Expected missing key ' . $key . '.');
+    }
+}
+
 /**
  * @return array{status:int,headers:array<string,string>,body:string}
  */
@@ -196,11 +207,10 @@ function daktelaFrameHeadersWith(array $headers): array
 /**
  * @return array{dt:string,sig:string}
  */
-function daktelaTabParams(string $ticketId, int $hourOffset = 0, int $minuteOffset = 0): array
+function daktelaTabParams(string $ticketId, int $secondOffset = 0): array
 {
     $dt = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
-        ->modify(($hourOffset >= 0 ? '+' : '') . $hourOffset . ' hours')
-        ->modify(($minuteOffset >= 0 ? '+' : '') . $minuteOffset . ' minutes')
+        ->modify(($secondOffset >= 0 ? '+' : '') . $secondOffset . ' seconds')
         ->format('YmdHis');
     $config = new AppConfig('https://daktela.example', 'api-token', null, sys_get_temp_dir(), sys_get_temp_dir());
     $sig = (new WebhookAccessGuard($config))->makeDaktelaTabSig($dt, $ticketId);
@@ -210,6 +220,23 @@ function daktelaTabParams(string $ticketId, int $hourOffset = 0, int $minuteOffs
     }
 
     return ['dt' => $dt, 'sig' => $sig];
+}
+
+function daktelaAccessToken(string $ticketId): string
+{
+    $config = new AppConfig('https://daktela.example', 'api-token', null, sys_get_temp_dir(), sys_get_temp_dir());
+
+    return (new WebhookAccessGuard($config))->accessTokenForTicket($ticketId);
+}
+
+/**
+ * @return array{status:int,headers:array<string,string>,body:string}
+ */
+function signedEntryRequest(WebhookApp $app, string $ticketId): array
+{
+    $tab = daktelaTabParams($ticketId);
+
+    return $app->handle($ticketId, null, null, null, [], $tab['dt'], $tab['sig']);
 }
 
 /**
@@ -233,7 +260,7 @@ test('app rejects missing ticket query parameter', function (): void {
 
     assertSameValue(400, $response['status']);
     assertSameValue('invalid_request', $payload['error']['code']);
-    assertSameValue('ticket', $payload['error']['details']['field']);
+    assertArrayMissingKey('details', $payload['error']);
 });
 
 test('app rejects empty ticket query parameter', function (): void {
@@ -242,7 +269,56 @@ test('app rejects empty ticket query parameter', function (): void {
 
     assertSameValue(400, $response['status']);
     assertSameValue('invalid_request', $payload['error']['code']);
-    assertSameValue('ticket', $payload['error']['details']['field']);
+    assertArrayMissingKey('details', $payload['error']);
+});
+
+test('app rejects ticket requests without Daktela tab signature', function (): void {
+    $response = app(new FakeDaktela([]), tempDir())->handle('123', null);
+    $payload = errorBody($response);
+
+    assertSameValue(403, $response['status']);
+    assertSameValue('forbidden_utility_access', $payload['error']['code']);
+    assertArrayMissingKey('details', $payload['error']);
+});
+
+test('Daktela tab signature matches helper formula with seconds', function (): void {
+    $config = new AppConfig('https://daktela.example', 'api-token', null, tempDir() . '/var', tempDir() . '/cache');
+    $guard = new WebhookAccessGuard($config);
+
+    assertSameValue('00359166.01407652.121045308', $guard->makeDaktelaTabSig('20260624153045', '123'));
+});
+
+test('access guard logs denied attempts with diagnostic reasons', function (): void {
+    $logger = new NullLogger();
+    $config = new AppConfig('https://daktela.example', 'api-token', null, tempDir() . '/var', tempDir() . '/cache', 1_000_000, 'https://ingreen.daktela.com');
+    $guard = new WebhookAccessGuard($config, $logger);
+    $tab = daktelaTabParams('123');
+
+    try {
+        $guard->assertAccessAllowed(
+            '123',
+            null,
+            'https://evil.example/tickets/123',
+            daktelaFrameHeadersWith(['Referer' => 'https://evil.example/tickets/123']),
+            $tab['dt'],
+            '00000000.00000000.00000000'
+        );
+    } catch (AppException $exception) {
+        assertSameValue(403, $exception->statusCode());
+    }
+
+    assertSameValue(1, count($logger->warnings));
+    assertSameValue('Daktela tab access denied.', $logger->warnings[0]['message']);
+
+    $context = $logger->warnings[0]['context'];
+    assertSameValue('123', $context['ticket']);
+    assertSameValue('https://ingreen.daktela.com', $context['allowedOrigin']);
+    assertTrueValue(in_array('missing_access_token', $context['denialReasons']['accessToken'], true));
+    assertTrueValue(in_array('sig_mismatch', $context['denialReasons']['daktelaTabSignature'], true));
+    assertTrueValue(in_array('referrer_not_allowed', $context['denialReasons']['daktelaTabSignature'], true));
+    assertSameValue($tab['dt'], $context['attempt']['daktelaTabSignature']['dt']);
+    assertSameValue(true, $context['attempt']['daktelaTabSignature']['sigPresent']);
+    assertTrueValue(is_string($context['attempt']['daktelaTabSignature']['sigFingerprint']));
 });
 
 test('ticket without attachments returns 404', function (): void {
@@ -250,7 +326,7 @@ test('ticket without attachments returns 404', function (): void {
         '/api/v6/tickets/123' => jsonResponse(['result' => ['name' => '123', 'has_attachment' => false]]),
         '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
     ]);
-    $response = app($fake, tempDir())->handle('123', null);
+    $response = signedEntryRequest(app($fake, tempDir()), '123');
     $payload = errorBody($response);
 
     assertSameValue(404, $response['status']);
@@ -282,7 +358,7 @@ test('ticket PDF list renders table and does not download files', function (): v
         },
     ]);
 
-    $response = app($fake, tempDir())->handle('123', null);
+    $response = signedEntryRequest(app($fake, tempDir()), '123');
 
     assertSameValue(200, $response['status']);
     assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
@@ -324,7 +400,7 @@ test('ticket PDF list includes PDFs from ticket activities attachments', functio
         ]),
     ]);
 
-    $response = app($fake, tempDir())->handle('123', null);
+    $response = signedEntryRequest(app($fake, tempDir()), '123');
     $requestPaths = array_map(
         static fn (array $request): string => parse_url($request['url'], PHP_URL_PATH) ?: '',
         $fake->requests
@@ -369,7 +445,7 @@ test('ticket PDF list includes activity attachment with numeric file id', functi
         ]),
     ]);
 
-    $response = app($fake, tempDir())->handle('15242', null);
+    $response = signedEntryRequest(app($fake, tempDir()), '15242');
 
     assertSameValue(200, $response['status']);
     assertTrueValue(str_contains($response['body'], '<td>przykladowa_polisa_ubezpieczenia_samochodu.pdf</td>'));
@@ -405,7 +481,7 @@ test('selected email activity attachment downloads through Daktela file mapper',
     ]);
     $app = app($fake, $dir);
 
-    $download = $app->handle('15242', '0');
+    $download = $app->handle('15242', '0', daktelaAccessToken('15242'));
     $request = $fake->requests[2];
     parse_str(parse_url($request['url'], PHP_URL_QUERY) ?: '', $query);
 
@@ -448,7 +524,7 @@ test('selected activity comment attachment downloads through activities comment 
     ]);
     $app = app($fake, $dir);
 
-    $download = $app->handle('15242', '0');
+    $download = $app->handle('15242', '0', daktelaAccessToken('15242'));
     $request = $fake->requests[2];
 
     assertSameValue(200, $download['status']);
@@ -482,7 +558,7 @@ test('ticket PDF list includes PDFs from nested activity item attachments', func
         ]),
     ]);
 
-    $response = app($fake, tempDir())->handle('123', null);
+    $response = signedEntryRequest(app($fake, tempDir()), '123');
 
     assertSameValue(200, $response['status']);
     assertTrueValue(str_contains($response['body'], '<td>nested-policy.pdf</td>'));
@@ -495,7 +571,7 @@ test('configured utility origin rejects direct browser entry requests', function
 
     assertSameValue(403, $response['status']);
     assertSameValue('forbidden_utility_access', $payload['error']['code']);
-    assertSameValue('https://ingreen.daktela.com', $payload['error']['details']['allowedOrigin']);
+    assertArrayMissingKey('details', $payload['error']);
 });
 
 test('configured utility origin allows Daktela referrer and sets frame policy', function (): void {
@@ -514,7 +590,7 @@ test('configured utility origin allows Daktela referrer and sets frame policy', 
     ]);
 
     $response = app($fake, tempDir(), 'https://ingreen.daktela.com')
-        ->handle('123', null, null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders(), $tab['dt'], $tab['sig']);
+        ->handle('123', null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders(), $tab['dt'], $tab['sig']);
 
     assertSameValue(200, $response['status']);
     assertSameValue('frame-ancestors https://ingreen.daktela.com', $response['headers']['Content-Security-Policy']);
@@ -523,28 +599,39 @@ test('configured utility origin allows Daktela referrer and sets frame policy', 
 
 test('configured utility origin rejects missing Daktela tab signature', function (): void {
     $response = app(new FakeDaktela([]), tempDir(), 'https://ingreen.daktela.com')
-        ->handle('123', null, null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders());
+        ->handle('123', null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders());
     $payload = errorBody($response);
 
     assertSameValue(403, $response['status']);
     assertSameValue('forbidden_utility_access', $payload['error']['code']);
-    assertSameValue(true, $payload['error']['details']['requiresDaktelaTabSignature']);
+    assertArrayMissingKey('details', $payload['error']);
 });
 
-test('configured utility origin rejects stale Daktela tab hour', function (): void {
-    $tab = daktelaTabParams('123', 3);
-    $response = app(new FakeDaktela([]), tempDir(), 'https://ingreen.daktela.com')
-        ->handle('123', null, null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders(), $tab['dt'], $tab['sig']);
-    $payload = errorBody($response);
+test('configured utility origin allows Daktela tab timestamp within skew', function (): void {
+    $tab = daktelaTabParams('123', -2);
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/scan.pdf', 'title' => 'scan.pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+    ]);
 
-    assertSameValue(403, $response['status']);
-    assertSameValue('forbidden_utility_access', $payload['error']['code']);
+    $response = app($fake, tempDir(), 'https://ingreen.daktela.com')
+        ->handle('123', null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders(), $tab['dt'], $tab['sig']);
+
+    assertSameValue(200, $response['status']);
 });
 
-test('configured utility origin rejects stale Daktela tab minute', function (): void {
-    $tab = daktelaTabParams('123', 0, -1);
+test('configured utility origin rejects stale Daktela tab timestamp', function (): void {
+    $tab = daktelaTabParams('123', -6);
     $response = app(new FakeDaktela([]), tempDir(), 'https://ingreen.daktela.com')
-        ->handle('123', null, null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders(), $tab['dt'], $tab['sig']);
+        ->handle('123', null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders(), $tab['dt'], $tab['sig']);
     $payload = errorBody($response);
 
     assertSameValue(403, $response['status']);
@@ -554,7 +641,7 @@ test('configured utility origin rejects stale Daktela tab minute', function (): 
 test('configured utility origin rejects wrong Daktela tab signature', function (): void {
     $tab = daktelaTabParams('123');
     $response = app(new FakeDaktela([]), tempDir(), 'https://ingreen.daktela.com')
-        ->handle('123', null, null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders(), $tab['dt'], '00000000.00000000.00000000');
+        ->handle('123', null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders(), $tab['dt'], '00000000.00000000.00000000');
     $payload = errorBody($response);
 
     assertSameValue(403, $response['status']);
@@ -564,7 +651,7 @@ test('configured utility origin rejects wrong Daktela tab signature', function (
 test('configured utility origin rejects Daktela referrer without iframe navigation headers', function (): void {
     $tab = daktelaTabParams('123');
     $response = app(new FakeDaktela([]), tempDir(), 'https://ingreen.daktela.com')
-        ->handle('123', null, null, null, 'https://ingreen.daktela.com/tickets/123', [], $tab['dt'], $tab['sig']);
+        ->handle('123', null, null, 'https://ingreen.daktela.com/tickets/123', [], $tab['dt'], $tab['sig']);
     $payload = errorBody($response);
 
     assertSameValue(403, $response['status']);
@@ -587,7 +674,7 @@ test('configured utility origin allows case-insensitive iframe navigation header
     ]);
 
     $response = app($fake, tempDir(), 'https://ingreen.daktela.com')
-        ->handle('123', null, null, null, ' https://ingreen.daktela.com/ ', daktelaFrameHeadersWith([
+        ->handle('123', null, null, ' https://ingreen.daktela.com/ ', daktelaFrameHeadersWith([
             'Sec-Fetch-Dest' => 'IFRAME',
             'Sec-Fetch-Mode' => 'NAVIGATE',
             'Sec-Fetch-Site' => 'CROSS-SITE',
@@ -600,7 +687,7 @@ test('configured utility origin allows case-insensitive iframe navigation header
 test('configured utility origin rejects malformed origin comparisons', function (): void {
     $tab = daktelaTabParams('123');
     $response = app(new FakeDaktela([]), tempDir(), 'ingreen.daktela.com')
-        ->handle('123', null, null, null, 'ingreen.daktela.com', daktelaFrameHeaders(), $tab['dt'], $tab['sig']);
+        ->handle('123', null, null, 'ingreen.daktela.com', daktelaFrameHeaders(), $tab['dt'], $tab['sig']);
     $payload = errorBody($response);
 
     assertSameValue(403, $response['status']);
@@ -624,8 +711,8 @@ test('configured utility origin allows signed in-app attachment request', functi
         '/files/scan.pdf' => pdfResponse(),
     ]);
     $app = app($fake, $dir, 'https://ingreen.daktela.com');
-    $list = $app->handle('123', null, null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders(), $tab['dt'], $tab['sig']);
-    $download = $app->handle('123', '0', accessTokenFromHtml($list['body']), null, 'https://app.example/?ticket=123');
+    $list = $app->handle('123', null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders(), $tab['dt'], $tab['sig']);
+    $download = $app->handle('123', '0', accessTokenFromHtml($list['body']), 'https://app.example/?ticket=123');
 
     assertSameValue(200, $download['status']);
     assertSameValue('text/html; charset=UTF-8', $download['headers']['Content-Type']);
@@ -651,7 +738,7 @@ test('configured utility key still requires Daktela tab signature', function ():
     ]);
 
     $response = app($fake, tempDir(), 'https://ingreen.daktela.com', 'shared-secret')
-        ->handle('123', null, null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders(), $tab['dt'], $tab['sig']);
+        ->handle('123', null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders(), $tab['dt'], $tab['sig']);
 
     assertSameValue(200, $response['status']);
     assertTrueValue(str_contains($response['body'], 'name="access_token"'));
@@ -669,7 +756,7 @@ test('downloader handles relative Daktela file path', function (): void {
 
 test('daktela 401 maps to upstream auth error', function (): void {
     $fake = new FakeDaktela(['/api/v6/tickets/123' => jsonResponse([], 401)]);
-    $response = app($fake, tempDir())->handle('123', null);
+    $response = signedEntryRequest(app($fake, tempDir()), '123');
     $payload = errorBody($response);
 
     assertSameValue(502, $response['status']);
@@ -702,13 +789,13 @@ test('selected PDF attachment is stored only after clicking read', function (): 
     ]);
     $app = app($fake, $dir);
 
-    $list = $app->handle('123', null);
+    $list = signedEntryRequest($app, '123');
 
     assertSameValue(200, $list['status']);
     assertSameValue([], $downloads);
     assertTrueValue(!is_file($dir . '/var/tmp/policies/policy-456.pdf'));
 
-    $download = $app->handle('123', '1');
+    $download = $app->handle('123', '1', daktelaAccessToken('123'));
 
     assertSameValue(200, $download['status']);
     assertSameValue('text/html; charset=UTF-8', $download['headers']['Content-Type']);
@@ -734,7 +821,7 @@ test('selected PDF attachment storage error renders message under table', functi
         '/files/not-pdf.pdf' => ['status' => 500, 'headers' => ['Content-Type' => 'text/plain'], 'body' => 'download failed'],
     ]);
 
-    $response = app($fake, tempDir())->handle('123', '0');
+    $response = app($fake, tempDir())->handle('123', '0', daktelaAccessToken('123'));
 
     assertSameValue(502, $response['status']);
     assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
@@ -758,7 +845,7 @@ test('selected PDF attachment extraction error renders message under table', fun
     ]);
 
     $response = app($fake, tempDir(), extractor: new FakePolicyDataExtractor(exception: new RuntimeException('Claude unavailable')))
-        ->handle('123', '0');
+        ->handle('123', '0', daktelaAccessToken('123'));
 
     assertSameValue(500, $response['status']);
     assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
@@ -782,7 +869,7 @@ test('selected PDF attachment Claude extraction error renders Claude message und
     ]);
 
     $response = app($fake, tempDir(), extractor: new FakePolicyDataExtractor(exception: new AppException(502, 'claude_policy_extraction_failed', 'Claude policy extraction request failed.')))
-        ->handle('123', '0');
+        ->handle('123', '0', daktelaAccessToken('123'));
 
     assertSameValue(502, $response['status']);
     assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
@@ -819,7 +906,7 @@ test('selected PDF attachment Claude extraction error renders Anthropic error me
 
     $response = app($fake, tempDir(), extractor: new FakePolicyDataExtractor(exception: new AppException(502, 'claude_policy_extraction_failed', 'Claude policy extraction request failed.', [
         'message' => $detailsMessage,
-    ])))->handle('123', '0');
+    ])))->handle('123', '0', daktelaAccessToken('123'));
 
     assertSameValue(502, $response['status']);
     assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);

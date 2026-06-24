@@ -297,7 +297,7 @@ final class WebhookApp
     {
         $accessToken = $this->accessGuard->accessTokenForTicket($ticketId);
         ob_start();
-        require dirname(__DIR__) . '/templates/pdf-attachments-table.php';
+        require dirname(__DIR__) . '/templates/page.php';
         return (string) ob_get_clean();
     }
 

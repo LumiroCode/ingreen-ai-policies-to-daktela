@@ -70,26 +70,26 @@ The ticket URL returns an HTML table with PDF attachments. The `odczytaj` button
 
 ## Daktela Utility Access Restriction
 
-Set `allowedUtilityOrigin` to the Daktela origin that is allowed to load this app and `utilitySecretKey` to a long random shared secret:
+Set `allowedUtilityOrigin` to the Daktela origin that is allowed to load this app:
 
 ```php
 'allowedUtilityOrigin' => 'https://ingreen.daktela.com',
-'utilitySecretKey' => 'use-a-long-random-shared-secret',
 ```
 
-Then include the key in the initial iframe URL:
+Then include the ticket id, timestamp, and signature in the initial iframe URL:
 
 ```html
-<iframe src="https://your-app.example/?ticket=123&utility_key=use-a-long-random-shared-secret"></iframe>
+<iframe src="https://your-app.example/?ticket=123&dt=20260624153045&sig=00000000.00000000.00000000"></iframe>
 ```
 
 When configured, the app:
 
-- rejects initial browser requests unless their referrer origin is `https://ingreen.daktela.com` and `utility_key` matches `utilitySecretKey`;
+- rejects initial browser requests unless their referrer origin is `https://ingreen.daktela.com` and `sig` matches the app's Daktela tab signature for `ticket` and `dt`;
+- rejects stale tab timestamps unless `dt` is within `5` seconds of current UTC;
 - sends `Content-Security-Policy: frame-ancestors https://ingreen.daktela.com` so browsers will not embed it on other sites;
-- signs the rendered `odczytaj` actions with a short-lived ticket-specific `access_token`, so follow-up PDF requests from inside the utility do not expose the shared `utility_key`.
+- signs the rendered `odczytaj` actions with a short-lived ticket-specific `access_token`, so follow-up PDF requests from inside the utility do not need to replay the initial tab signature.
 
-Treat `utilitySecretKey` as a password. Generate a high-entropy value, keep the app on HTTPS, and rotate the key if the iframe URL is exposed outside Daktela.
+Treat the signature transformation as private. Keep the app on HTTPS and rotate the transformation if signed iframe URLs are exposed outside Daktela.
 
 ## Runtime Files
 
