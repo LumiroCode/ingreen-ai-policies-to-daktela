@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Ingreen\DaktelaPolicy;
 
 use Ingreen\DaktelaPolicy\Config\AppConfig;
+use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\Support\AppException;
 
 final class WebhookAccessGuard
@@ -12,8 +13,10 @@ final class WebhookAccessGuard
     private const ACCESS_TOKEN_TTL_SECONDS = 900;
     private const DAKTELA_TAB_DT_FORMAT = 'YmdHis';
 
-    public function __construct(private readonly AppConfig $config)
-    {
+    public function __construct(
+        private readonly AppConfig $config,
+        private readonly ?AppLogger $logger = null
+    ) {
     }
 
     /**
@@ -28,15 +31,24 @@ final class WebhookAccessGuard
         ?string $daktelaTabSig = null
     ): void
     {
-        if ($accessToken !== null && $this->isValidAccessToken($ticketId, $accessToken)) {
+        $accessTokenAttempt = $this->accessTokenAttemptDiagnostics($ticketId, $accessToken);
+
+        if ($accessTokenAttempt['valid'] === true) {
             return;
         }
 
-        if ($this->isValidEntryRequest($ticketId, $daktelaTabDt, $daktelaTabSig, $referrer, $requestHeaders)) {
+        $entryAttempt = $this->entryRequestAttemptDiagnostics($ticketId, $daktelaTabDt, $daktelaTabSig, $referrer, $requestHeaders);
+
+        if ($entryAttempt['valid'] === true) {
             return;
         }
 
-        throw new AppException(403, 'forbidden_utility_access', 'Access denied.',);
+        $this->logDeniedAccess($ticketId, $accessToken, $accessTokenAttempt, $entryAttempt, $referrer, $requestHeaders, $daktelaTabDt, $daktelaTabSig);
+
+        throw new AppException(403, 'forbidden_utility_access', 'Access denied.', [
+            'allowedOrigin' => $this->config->allowedUtilityOrigin,
+            'requiresDaktelaTabSignature' => true,
+        ]);
     }
 
     public function makeDaktelaTabSig(string $dt, string $ticket): ?string
@@ -138,6 +150,88 @@ final class WebhookAccessGuard
 
     /**
      * @param array<string,string> $requestHeaders
+     * @return array{valid:bool,reasons:list<string>,checks:array<string,mixed>}
+     */
+    private function entryRequestAttemptDiagnostics(
+        string $ticketId,
+        ?string $daktelaTabDt,
+        ?string $daktelaTabSig,
+        ?string $referrer,
+        array $requestHeaders
+    ): array
+    {
+        $reasons = [];
+        $checks = [
+            'dtPresent' => $daktelaTabDt !== null,
+            'sigPresent' => $daktelaTabSig !== null,
+            'dtFormatValid' => false,
+            'sigMatches' => false,
+            'dtFresh' => false,
+            'allowedOriginConfigured' => $this->config->allowedUtilityOrigin !== null,
+            'referrerPresent' => false,
+            'referrerAllowed' => $this->config->allowedUtilityOrigin === null,
+            'frameNavigationHeadersValid' => $this->config->allowedUtilityOrigin === null,
+        ];
+
+        if ($daktelaTabDt === null) {
+            $reasons[] = 'missing_dt';
+        } else {
+            $checks['dtFormatValid'] = $this->isValidDaktelaTabDt($daktelaTabDt);
+
+            if ($checks['dtFormatValid'] !== true) {
+                $reasons[] = 'invalid_dt_format';
+            }
+        }
+
+        if ($daktelaTabSig === null) {
+            $reasons[] = 'missing_sig';
+        }
+
+        if ($checks['dtFormatValid'] === true && $daktelaTabSig !== null) {
+            $expected = $this->makeDaktelaTabSig((string) $daktelaTabDt, $ticketId);
+            $checks['sigMatches'] = $expected !== null && hash_equals($expected, $daktelaTabSig);
+
+            if ($checks['sigMatches'] !== true) {
+                $reasons[] = 'sig_mismatch';
+            }
+
+            $checks['dtFresh'] = $this->isFreshDaktelaTabDt((string) $daktelaTabDt);
+
+            if ($checks['dtFresh'] !== true) {
+                $reasons[] = 'stale_dt';
+            }
+        }
+
+        if ($this->config->allowedUtilityOrigin !== null) {
+            $effectiveReferrer = $referrer ?? $this->headerValue($requestHeaders, 'Referer');
+            $checks['referrerPresent'] = $effectiveReferrer !== null;
+
+            if ($effectiveReferrer === null) {
+                $reasons[] = 'missing_referrer';
+            } else {
+                $checks['referrerAllowed'] = $this->isAllowedReferrer($effectiveReferrer);
+
+                if ($checks['referrerAllowed'] !== true) {
+                    $reasons[] = 'referrer_not_allowed';
+                }
+            }
+
+            $checks['frameNavigationHeadersValid'] = $this->hasExpectedFrameNavigationHeaders($requestHeaders);
+
+            if ($checks['frameNavigationHeadersValid'] !== true) {
+                $reasons[] = 'invalid_frame_navigation_headers';
+            }
+        }
+
+        return [
+            'valid' => $reasons === [],
+            'reasons' => $reasons,
+            'checks' => $checks,
+        ];
+    }
+
+    /**
+     * @param array<string,string> $requestHeaders
      */
     private function hasExpectedFrameNavigationHeaders(array $requestHeaders): bool
     {
@@ -171,6 +265,161 @@ final class WebhookAccessGuard
         return $expected !== null
             && hash_equals($expected, $sig)
             && $this->isFreshDaktelaTabDt($dt);
+    }
+
+    /**
+     * @return array{valid:bool,reasons:list<string>,checks:array<string,mixed>}
+     */
+    private function accessTokenAttemptDiagnostics(string $ticketId, ?string $token): array
+    {
+        if ($token === null || trim($token) === '') {
+            return [
+                'valid' => false,
+                'reasons' => ['missing_access_token'],
+                'checks' => [
+                    'present' => false,
+                ],
+            ];
+        }
+
+        $parts = explode('.', $token, 2);
+        $checks = [
+            'present' => true,
+            'hasPayloadAndSignature' => count($parts) === 2,
+            'signatureMatches' => false,
+            'payloadJsonValid' => false,
+            'ticketMatches' => false,
+            'expiresPresent' => false,
+            'notExpired' => false,
+        ];
+        $reasons = [];
+
+        if ($checks['hasPayloadAndSignature'] !== true) {
+            $reasons[] = 'malformed_access_token';
+
+            return [
+                'valid' => false,
+                'reasons' => $reasons,
+                'checks' => $checks,
+            ];
+        }
+
+        $checks['signatureMatches'] = hash_equals($this->accessTokenSignature($parts[0]), $parts[1]);
+
+        if ($checks['signatureMatches'] !== true) {
+            $reasons[] = 'access_token_signature_mismatch';
+        }
+
+        $payload = json_decode($this->base64UrlDecode($parts[0]), true);
+        $checks['payloadJsonValid'] = is_array($payload);
+
+        if (!is_array($payload)) {
+            $reasons[] = 'invalid_access_token_payload';
+
+            return [
+                'valid' => false,
+                'reasons' => $reasons,
+                'checks' => $checks,
+            ];
+        }
+
+        $checks['ticketMatches'] = ($payload['ticket'] ?? null) === $ticketId;
+        $checks['expiresPresent'] = is_int($payload['expires'] ?? null);
+        $checks['notExpired'] = $checks['expiresPresent'] === true && $payload['expires'] >= time();
+
+        if ($checks['ticketMatches'] !== true) {
+            $reasons[] = 'access_token_ticket_mismatch';
+        }
+
+        if ($checks['expiresPresent'] !== true) {
+            $reasons[] = 'missing_access_token_expiry';
+        } elseif ($checks['notExpired'] !== true) {
+            $reasons[] = 'expired_access_token';
+        }
+
+        return [
+            'valid' => $reasons === [],
+            'reasons' => $reasons,
+            'checks' => $checks,
+        ];
+    }
+
+    /**
+     * @param array{valid:bool,reasons:list<string>,checks:array<string,mixed>} $accessTokenAttempt
+     * @param array{valid:bool,reasons:list<string>,checks:array<string,mixed>} $entryAttempt
+     * @param array<string,string> $requestHeaders
+     */
+    private function logDeniedAccess(
+        string $ticketId,
+        ?string $accessToken,
+        array $accessTokenAttempt,
+        array $entryAttempt,
+        ?string $referrer,
+        array $requestHeaders,
+        ?string $daktelaTabDt,
+        ?string $daktelaTabSig
+    ): void
+    {
+        $context = [
+            'ticket' => $ticketId,
+            'allowedOrigin' => $this->config->allowedUtilityOrigin,
+            'attempt' => [
+                'accessToken' => [
+                    'present' => $accessTokenAttempt['checks']['present'] ?? false,
+                    'fingerprint' => $this->fingerprintNullable($accessToken),
+                    'reasons' => $accessTokenAttempt['reasons'],
+                    'checks' => $accessTokenAttempt['checks'],
+                ],
+                'daktelaTabSignature' => [
+                    'dt' => $daktelaTabDt,
+                    'sigPresent' => $daktelaTabSig !== null,
+                    'sigFingerprint' => $this->fingerprintNullable($daktelaTabSig),
+                    'reasons' => $entryAttempt['reasons'],
+                    'checks' => $entryAttempt['checks'],
+                ],
+                'referrerArgument' => $referrer,
+                'headers' => $this->accessLogHeaders($requestHeaders),
+            ],
+            'denialReasons' => [
+                'accessToken' => $accessTokenAttempt['reasons'],
+                'daktelaTabSignature' => $entryAttempt['reasons'],
+            ],
+        ];
+
+        if ($this->logger !== null) {
+            $this->logger->warning('Daktela tab access denied.', $context);
+            return;
+        }
+
+        error_log(json_encode([
+            'time' => gmdate('c'),
+            'level' => 'warning',
+            'message' => 'Daktela tab access denied.',
+            'context' => $context,
+        ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * @param array<string,string> $headers
+     * @return array<string,string|null>
+     */
+    private function accessLogHeaders(array $headers): array
+    {
+        return [
+            'Referer' => $this->headerValue($headers, 'Referer'),
+            'Sec-Fetch-Dest' => $this->headerValue($headers, 'Sec-Fetch-Dest'),
+            'Sec-Fetch-Mode' => $this->headerValue($headers, 'Sec-Fetch-Mode'),
+            'Sec-Fetch-Site' => $this->headerValue($headers, 'Sec-Fetch-Site'),
+        ];
+    }
+
+    private function fingerprintNullable(?string $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return substr(hash('sha256', $value), 0, 16);
     }
 
     private function isFreshDaktelaTabDt(string $dt): bool
