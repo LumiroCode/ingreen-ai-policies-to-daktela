@@ -5,8 +5,76 @@ declare(strict_types=1);
 /**
  * @var string $ticketId
  * @var string $ticketTitle
+ * @var string $daktelaBaseUrl
  * @var array{type:string,text:string}|null $message
+ * @var list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
+ * @var string|null $selectedAttachmentIndex
  */
+
+$previewAttachment = null;
+
+if ($selectedAttachmentIndex !== null && ctype_digit($selectedAttachmentIndex)) {
+    $previewAttachment = $attachments[(int) $selectedAttachmentIndex] ?? null;
+}
+
+if ($previewAttachment === null) {
+    $previewAttachment = $attachments[0] ?? null;
+}
+
+$previewAttachmentTitle = is_array($previewAttachment)
+    ? (string) ($previewAttachment['title'] ?? basename((string) $previewAttachment['file']))
+    : null;
+
+$previewAttachmentUrl = static function (string $file, string $daktelaBaseUrl): string {
+    if (parse_url($file, PHP_URL_SCHEME) === null) {
+        $file = rtrim($daktelaBaseUrl, '/') . '/' . ltrim($file, '/');
+    }
+
+    $parts = parse_url($file);
+
+    if ($parts === false) {
+        return $file;
+    }
+
+    $query = [];
+    parse_str($parts['query'] ?? '', $query);
+    $query['download'] = '0';
+    $queryString = http_build_query($query);
+
+    $url = '';
+
+    if (isset($parts['scheme'])) {
+        $url .= $parts['scheme'] . '://';
+    }
+
+    if (isset($parts['user'])) {
+        $url .= $parts['user'];
+
+        if (isset($parts['pass'])) {
+            $url .= ':' . $parts['pass'];
+        }
+
+        $url .= '@';
+    }
+
+    if (isset($parts['host'])) {
+        $url .= $parts['host'];
+    }
+
+    if (isset($parts['port'])) {
+        $url .= ':' . $parts['port'];
+    }
+
+    $url .= $parts['path'] ?? '';
+    $url .= $queryString !== '' ? '?' . $queryString : '';
+    $url .= isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
+
+    return $url;
+};
+
+$previewUrl = is_array($previewAttachment)
+    ? $previewAttachmentUrl((string) $previewAttachment['file'], $daktelaBaseUrl)
+    : null;
 
 ?>
 
@@ -34,16 +102,41 @@ declare(strict_types=1);
         </div>
     </div>
     <main class="app-shell">
-        <header class="app-header">
-            <p class="app-kicker">Polisa z PDF</p>
-            <h1 class="ticket-title"><?= htmlspecialchars($ticketTitle, ENT_QUOTES, 'UTF-8') ?></h1>
-            <p class="ticket-debug">Ticket #<?= htmlspecialchars($ticketId, ENT_QUOTES, 'UTF-8') ?></p>
-        </header>
+        <div class="app-layout">
+            <div class="app-flow">
+                <header class="app-header">
+                    <p class="app-kicker">Polisa z PDF</p>
+                    <h1 class="ticket-title"><?= htmlspecialchars($ticketTitle, ENT_QUOTES, 'UTF-8') ?></h1>
+                    <p class="ticket-debug">Ticket #<?= htmlspecialchars($ticketId, ENT_QUOTES, 'UTF-8') ?></p>
+                </header>
 
-        <?php
-            require __DIR__ . '/pdf-attachments-table.php';
-            require __DIR__ . '/feedback-confirmation.php';
-        ?>
+                <?php
+                    require __DIR__ . '/pdf-attachments-table.php';
+                    require __DIR__ . '/feedback-confirmation.php';
+                ?>
+            </div>
+
+            <aside class="panel pdf-preview-panel" aria-labelledby="pdf-preview-heading">
+                <div class="section-heading">
+                    <div class="review-title">
+                        <h2 id="pdf-preview-heading">Podgląd PDF</h2>
+                        <?php if ($previewAttachmentTitle !== null && trim($previewAttachmentTitle) !== ''): ?>
+                            <p><?= htmlspecialchars($previewAttachmentTitle, ENT_QUOTES, 'UTF-8') ?></p>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <?php if ($previewUrl !== null): ?>
+                    <iframe
+                        class="pdf-preview-frame"
+                        src="<?= htmlspecialchars($previewUrl, ENT_QUOTES, 'UTF-8') ?>"
+                        title="Podgląd PDF: <?= htmlspecialchars((string) $previewAttachmentTitle, ENT_QUOTES, 'UTF-8') ?>"
+                    ></iframe>
+                <?php else: ?>
+                    <p class="empty-state">Brak pliku PDF do podglądu.</p>
+                <?php endif; ?>
+            </aside>
+        </div>
     </main>
 </body>
 </html>

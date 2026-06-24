@@ -599,7 +599,7 @@ test('selected email activity attachment downloads through Daktela file mapper',
                 ],
             ],
         ]),
-        '/file/download.php' => pdfResponse("%PDF-1.4\nmapped"),
+        '/file/download' => pdfResponse("%PDF-1.4\nmapped"),
     ]);
     $app = app($fake, $dir);
 
@@ -608,11 +608,15 @@ test('selected email activity attachment downloads through Daktela file mapper',
     parse_str(parse_url($request['url'], PHP_URL_QUERY) ?: '', $query);
 
     assertSameValue(200, $download['status']);
-    assertSameValue('https://daktela.example/file/download.php?mapper=activitiesEmailFiles&name=35869&iconHash=Polisa_904001145228.pdf&download=1', $request['url']);
+    assertSameValue('https://daktela.example/file/download?mapper=activitiesEmailFiles&name=35869&iconHash=Polisa_904001145228.pdf&download=1', $request['url']);
     assertSameValue('activitiesEmailFiles', $query['mapper']);
     assertSameValue('35869', $query['name']);
     assertSameValue('Polisa_904001145228.pdf', $query['iconHash']);
     assertSameValue('1', $query['download']);
+    assertTrueValue(str_contains(
+        $download['body'],
+        'src="https://daktela.example/file/download?mapper=activitiesEmailFiles&amp;name=35869&amp;iconHash=Polisa_904001145228.pdf&amp;download=0"'
+    ));
     assertSameValue("%PDF-1.4\nmapped", file_get_contents($dir . '/var/tmp/policies/35869.pdf'));
 });
 
@@ -642,7 +646,7 @@ test('selected activity comment attachment downloads through activities comment 
                 ],
             ],
         ]),
-        '/file/download.php' => pdfResponse("%PDF-1.4\ncomment"),
+        '/file/download' => pdfResponse("%PDF-1.4\ncomment"),
     ]);
     $app = app($fake, $dir);
 
@@ -650,7 +654,7 @@ test('selected activity comment attachment downloads through activities comment 
     $request = $fake->requests[2];
 
     assertSameValue(200, $download['status']);
-    assertSameValue('https://daktela.example/file/download.php?mapper=activitiesComment&name=2023&iconHash=Faktura+FV+9_4_2026.pdf&download=1', $request['url']);
+    assertSameValue('https://daktela.example/file/download?mapper=activitiesComment&name=2023&iconHash=Faktura+FV+9_4_2026.pdf&download=1', $request['url']);
     assertSameValue("%PDF-1.4\ncomment", file_get_contents($dir . '/var/tmp/policies/2023.pdf'));
 });
 
@@ -1075,6 +1079,7 @@ test('selected PDF attachment is stored only after clicking read', function (): 
 
     assertSameValue(200, $list['status']);
     assertSameValue([], $downloads);
+    assertTrueValue(str_contains($list['body'], 'src="https://daktela.example/files/first.pdf?download=0"'));
     assertTrueValue(!is_file($dir . '/var/tmp/policies/policy-456.pdf'));
 
     $download = $app->handle('123', '1', daktelaAccessToken('123'));
@@ -1088,6 +1093,7 @@ test('selected PDF attachment is stored only after clicking read', function (): 
     assertTrueValue(str_contains($download['body'], 'value="Octavia"'));
     assertTrueValue(str_contains($download['body'], 'value="50 000 CZK"'));
     assertTrueValue(str_contains($download['body'], 'second.pdf'));
+    assertTrueValue(str_contains($download['body'], 'src="https://daktela.example/files/second.pdf?download=0"'));
     assertSameValue("%PDF-1.4\nsecond", file_get_contents($dir . '/var/tmp/policies/policy-456.pdf'));
     assertSameValue(['second'], $downloads);
 });

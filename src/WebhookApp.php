@@ -485,6 +485,7 @@ final class WebhookApp
     ): string
     {
         $accessToken = $this->accessGuard->accessTokenForTicket($ticketId);
+        $daktelaBaseUrl = $this->config->daktelaBaseUrl;
         $ticketTitle = $this->displayTicketTitle($ticketId, $ticketTitle);
         ob_start();
         require dirname(__DIR__) . '/templates/page.php';

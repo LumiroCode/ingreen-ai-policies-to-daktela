@@ -31,6 +31,7 @@ body {
     font-size: 14px;
     line-height: 1.35;
     margin: 0;
+    overflow-y: scroll;
 }
 
 button,
@@ -39,13 +40,24 @@ input {
 }
 
 .app-shell {
+    margin: 0 auto;
+    max-width: 1480px;
+    min-height: 100vh;
+    padding: 10px;
+}
+
+.app-layout {
+    align-items: start;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: minmax(360px, 520px) minmax(440px, 1fr);
+}
+
+.app-flow {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    margin: 0 auto;
-    max-width: 1024px;
-    min-height: 100vh;
-    padding: 10px;
+    min-width: 0;
 }
 
 .app-header {
@@ -119,6 +131,22 @@ h2 {
 
 .panel {
     overflow: hidden;
+}
+
+.pdf-preview-panel {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: calc(100vh - 20px);
+    position: sticky;
+    top: 10px;
+}
+
+.pdf-preview-frame {
+    border: 0;
+    display: block;
+    height: 100%;
+    min-height: 720px;
+    width: 100%;
 }
 
 .section-heading {
@@ -457,5 +485,20 @@ h2 {
 
     .action-bar {
         grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 900px) {
+    .app-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .pdf-preview-panel {
+        min-height: 70vh;
+        position: static;
+    }
+
+    .pdf-preview-frame {
+        min-height: 70vh;
     }
 }

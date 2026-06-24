@@ -230,7 +230,7 @@ final class TicketPdfAttachments
 
     private function daktelaDownloadPath(string $mapper, string $fileId, string $title): string
     {
-        return '/file/download.php?' . http_build_query([
+        return '/file/download?' . http_build_query([
             'mapper' => $mapper,
             'name' => $fileId,
             'iconHash' => $title,
