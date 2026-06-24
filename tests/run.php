@@ -1116,8 +1116,8 @@ test('selected PDF attachment is stored only after clicking read', function (): 
 
     assertSameValue(200, $list['status']);
     assertSameValue([], $downloads);
-    assertTrueValue(str_contains($list['body'], 'src="?ticket=123&amp;attachment=0&amp;access_token='));
-    assertTrueValue(str_contains($list['body'], '&amp;policy_pdf=1"'));
+    assertTrueValue(!str_contains($list['body'], 'policy_pdf=1'));
+    assertTrueValue(str_contains($list['body'], 'Brak pliku PDF do podglądu.'));
     assertTrueValue(!is_file($dir . '/var/policies/policy-456.pdf'));
 
     $download = $app->handle('123', '1', daktelaAccessToken('123'));

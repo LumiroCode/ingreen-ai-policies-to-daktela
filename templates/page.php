@@ -19,11 +19,6 @@ if ($selectedAttachmentIndex !== null && ctype_digit($selectedAttachmentIndex)) 
     $previewAttachment = $attachments[$previewAttachmentIndex] ?? null;
 }
 
-if ($previewAttachment === null) {
-    $previewAttachmentIndex = 0;
-    $previewAttachment = $attachments[0] ?? null;
-}
-
 $previewAttachmentTitle = is_array($previewAttachment)
     ? (string) ($previewAttachment['title'] ?? basename((string) $previewAttachment['file']))
     : null;
