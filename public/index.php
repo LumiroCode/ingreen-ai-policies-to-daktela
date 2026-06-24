@@ -32,7 +32,7 @@ try {
     $app = new WebhookApp(
         $config,
         $daktela,
-        new TicketPdfAttachments($daktela, $logger),
+        new TicketPdfAttachments($daktela, $logger, $config->cacheDir),
         new ClaudePolicyDataExtractor(AnthropicClaudeMessagesClient::fromApiKey($config->claudeApiKey)),
         $logger
     );
@@ -48,7 +48,8 @@ try {
         queryStringParam('confirmation'),
         queryArrayParam('policy_data'),
         queryArrayParam('policy_locked'),
-        queryStringParam('title')
+        queryStringParam('title'),
+        queryBoolParam('refresh_attachments')
     ));
 } catch (AppException $exception) {
     sendJson(['status' => $exception->statusCode(), 'body' => [
@@ -73,6 +74,13 @@ function queryStringParam(string $name): ?string
     $value = $_GET[$name] ?? null;
 
     return is_string($value) ? $value : null;
+}
+
+function queryBoolParam(string $name): bool
+{
+    $value = $_GET[$name] ?? null;
+
+    return is_string($value) && in_array(strtolower($value), ['1', 'true', 'yes'], true);
 }
 
 /**

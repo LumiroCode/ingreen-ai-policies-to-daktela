@@ -130,6 +130,18 @@ h2 {
     padding: 9px 10px;
 }
 
+.section-title {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+}
+
+.attachment-refresh-form {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
 .review-title {
     display: grid;
     gap: 3px;
@@ -426,6 +438,11 @@ h2 {
 
     .app-shell {
         padding: 8px;
+    }
+
+    .section-heading {
+        align-items: flex-start;
+        flex-direction: column;
     }
 
     .attachment-row {

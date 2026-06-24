@@ -47,7 +47,8 @@ final class WebhookApp
         ?string $confirmation = null,
         ?array $policyData = null,
         ?array $policyLocked = null,
-        ?string $ticketTitle = null
+        ?string $ticketTitle = null,
+        bool $forceAttachmentRefresh = false
     ): array
     {
         $requestId = bin2hex(random_bytes(8));
@@ -95,7 +96,7 @@ final class WebhookApp
                 );
             }
 
-            return $this->ticketPdfListResponse($ticketId, $ticketTitle);
+            return $this->ticketPdfListResponse($ticketId, $ticketTitle, $forceAttachmentRefresh);
         } catch (AppException $exception) {
             $this->logger->warning('Ticket request failed.', [
                 'requestId' => $requestId,
@@ -133,9 +134,9 @@ final class WebhookApp
     /**
      * @return array{status:int,headers:array<string,string>,body:string}
      */
-    private function ticketPdfListResponse(string $ticketId, ?string $ticketTitle): array
+    private function ticketPdfListResponse(string $ticketId, ?string $ticketTitle, bool $forceAttachmentRefresh): array
     {
-        $attachments = $this->ticketPdfAttachments->forTicket($ticketId);
+        $attachments = $this->ticketPdfAttachments->forTicket($ticketId, $forceAttachmentRefresh);
 
         return [
             'status' => 200,

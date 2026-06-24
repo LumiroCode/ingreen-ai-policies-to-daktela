@@ -171,7 +171,7 @@ function app(FakeDaktela $fake, string $dir, ?string $allowedUtilityOrigin = nul
     $logger = new NullLogger();
     $daktela = new DaktelaClient($config->daktelaBaseUrl, $config->daktelaApiToken, $fake);
 
-    return new WebhookApp($config, $daktela, new TicketPdfAttachments($daktela, $logger), $extractor ?? new FakePolicyDataExtractor(), $logger);
+    return new WebhookApp($config, $daktela, new TicketPdfAttachments($daktela, $logger, $config->cacheDir), $extractor ?? new FakePolicyDataExtractor(), $logger);
 }
 
 function accessTokenFromHtml(string $html): string
@@ -384,11 +384,113 @@ test('ticket PDF list renders table and does not download files', function (): v
     assertTrueValue(str_contains($response['body'], 'policy.pdf'));
     assertTrueValue(str_contains($response['body'], 'class="attachment-row attachment-read-form'));
     assertTrueValue(str_contains($response['body'], 'data-loading-label="Odczytuję..."'));
+    assertTrueValue(str_contains($response['body'], 'name="refresh_attachments" value="1"'));
+    assertTrueValue(str_contains($response['body'], 'data-loading-label="Odświeżam..."'));
+    assertTrueValue(str_contains($response['body'], '>Odśwież<'));
     assertTrueValue(str_contains($response['body'], 'id="processing-message"'));
     assertTrueValue(str_contains($response['body'], 'Trwa odczyt danych z polisy.'));
     assertTrueValue(str_contains(file_get_contents(dirname(__DIR__) . '/public/assets/app.js'), 'button.textContent = loadingLabel;'));
     assertTrueValue(!str_contains($response['body'], 'readme.txt'));
     assertSameValue(0, $downloadCount);
+});
+
+test('ticket PDF list uses cached Daktela attachment list for one day', function (): void {
+    $dir = tempDir();
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/scan.pdf', 'title' => 'scan.pdf', 'type' => 'application/pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+    ]);
+    $app = app($fake, $dir);
+
+    $first = signedEntryRequest($app, '123');
+    $second = $app->handle('123', null, daktelaAccessToken('123'));
+    $requestPaths = array_map(
+        static fn (array $request): string => parse_url($request['url'], PHP_URL_PATH) ?: '',
+        $fake->requests
+    );
+
+    assertSameValue(200, $first['status']);
+    assertSameValue(200, $second['status']);
+    assertSameValue(1, count(array_filter($requestPaths, static fn (string $path): bool => $path === '/api/v6/tickets/123')));
+    assertSameValue(1, count(array_filter($requestPaths, static fn (string $path): bool => $path === '/api/v6/tickets/123/activities')));
+    assertTrueValue(str_contains($second['body'], 'scan.pdf'));
+});
+
+test('stale ticket PDF attachment cache is refreshed after one day', function (): void {
+    $dir = tempDir();
+    $ticketCalls = 0;
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => function () use (&$ticketCalls): array {
+            $ticketCalls++;
+
+            return jsonResponse([
+                'result' => [
+                    'name' => '123',
+                    'has_attachment' => true,
+                    'attachments' => [
+                        ['file' => '/files/scan-' . $ticketCalls . '.pdf', 'title' => 'scan-' . $ticketCalls . '.pdf', 'type' => 'application/pdf'],
+                    ],
+                ],
+            ]);
+        },
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+    ]);
+    $app = app($fake, $dir);
+
+    $first = signedEntryRequest($app, '123');
+    $cacheFiles = glob($dir . '/cache/daktela-ticket-attachments/*.json') ?: [];
+
+    assertSameValue(200, $first['status']);
+    assertSameValue(1, count($cacheFiles));
+
+    touch($cacheFiles[0], time() - 86401);
+
+    $second = $app->handle('123', null, daktelaAccessToken('123'));
+
+    assertSameValue(200, $second['status']);
+    assertSameValue(2, $ticketCalls);
+    assertTrueValue(str_contains($second['body'], 'scan-2.pdf'));
+});
+
+test('ticket PDF list refresh button bypasses cached Daktela attachment list', function (): void {
+    $dir = tempDir();
+    $ticketCalls = 0;
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => function () use (&$ticketCalls): array {
+            $ticketCalls++;
+
+            return jsonResponse([
+                'result' => [
+                    'name' => '123',
+                    'has_attachment' => true,
+                    'attachments' => [
+                        ['file' => '/files/scan-' . $ticketCalls . '.pdf', 'title' => 'scan-' . $ticketCalls . '.pdf', 'type' => 'application/pdf'],
+                    ],
+                ],
+            ]);
+        },
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+    ]);
+    $app = app($fake, $dir);
+
+    $first = signedEntryRequest($app, '123');
+    $cached = $app->handle('123', null, daktelaAccessToken('123'));
+    $refreshed = $app->handle('123', null, daktelaAccessToken('123'), forceAttachmentRefresh: true);
+
+    assertSameValue(200, $first['status']);
+    assertSameValue(200, $cached['status']);
+    assertSameValue(200, $refreshed['status']);
+    assertSameValue(2, $ticketCalls);
+    assertTrueValue(str_contains($cached['body'], 'scan-1.pdf'));
+    assertTrueValue(str_contains($refreshed['body'], 'scan-2.pdf'));
 });
 
 test('ticket PDF list includes PDFs from ticket activities attachments', function (): void {

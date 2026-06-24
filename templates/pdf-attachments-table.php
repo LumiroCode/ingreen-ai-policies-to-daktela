@@ -14,8 +14,17 @@ declare(strict_types=1);
 
 <section class="panel attachment-panel" aria-labelledby="attachments-heading">
     <div class="section-heading">
-        <h2 id="attachments-heading">Załączniki PDF</h2>
-        <span class="count-badge"><?= count($attachments) ?></span>
+        <div class="section-title">
+            <h2 id="attachments-heading">Załączniki PDF</h2>
+            <span class="count-badge"><?= count($attachments) ?></span>
+        </div>
+        <form class="attachment-refresh-form" method="get" data-loading-label="Odświeżam..." data-show-processing-message="false">
+            <input type="hidden" name="ticket" value="<?= htmlspecialchars($ticketId, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="title" value="<?= htmlspecialchars($ticketTitle, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="access_token" value="<?= htmlspecialchars($accessToken, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="refresh_attachments" value="1">
+            <button class="button secondary" type="submit">Odśwież</button>
+        </form>
     </div>
 
     <?php if ($attachments === []): ?>

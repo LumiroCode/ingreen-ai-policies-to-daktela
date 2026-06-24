@@ -10,19 +10,45 @@ use Ingreen\DaktelaPolicy\Support\AppException;
 
 final class TicketPdfAttachments
 {
+    private const ATTACHMENT_CACHE_TTL_SECONDS = 86400;
+
     /** @var array<string,string> */
     private array $ticketTitles = [];
 
     public function __construct(
         private readonly DaktelaClient $daktela,
-        private readonly AppLogger $logger
+        private readonly AppLogger $logger,
+        private readonly ?string $cacheDir = null
     ) {
     }
 
     /**
      * @return list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}>
      */
-    public function forTicket(string $ticketId): array
+    public function forTicket(string $ticketId, bool $forceRefresh = false): array
+    {
+        if (!$forceRefresh) {
+            $cached = $this->readAttachmentCache($ticketId);
+
+            if ($cached !== null) {
+                if ($cached['title'] !== null) {
+                    $this->ticketTitles[$ticketId] = $cached['title'];
+                }
+
+                return $cached['attachments'];
+            }
+        }
+
+        $attachments = $this->fetchForTicket($ticketId);
+        $this->writeAttachmentCache($ticketId, $attachments, $this->ticketTitles[$ticketId] ?? null);
+
+        return $attachments;
+    }
+
+    /**
+     * @return list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}>
+     */
+    private function fetchForTicket(string $ticketId): array
     {
         $ticket = $this->resultObject($this->daktela->getJson('/api/v6/tickets/' . rawurlencode($ticketId)));
         $ticketTitle = $this->ticketTitle($ticket);
@@ -312,5 +338,94 @@ final class TicketPdfAttachments
     private function attachmentKey(array $attachment): string
     {
         return $attachment['file'] . '|' . ($attachment['title'] ?? '') . '|' . ($attachment['type'] ?? '');
+    }
+
+    /**
+     * @return array{attachments:list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}>,title:?string}|null
+     */
+    private function readAttachmentCache(string $ticketId): ?array
+    {
+        $path = $this->attachmentCachePath($ticketId);
+
+        if ($path === null || !is_file($path)) {
+            return null;
+        }
+
+        $modifiedAt = filemtime($path);
+
+        if ($modifiedAt === false || time() - $modifiedAt >= self::ATTACHMENT_CACHE_TTL_SECONDS) {
+            return null;
+        }
+
+        $payload = json_decode((string) file_get_contents($path), true);
+
+        if (!is_array($payload) || !is_array($payload['attachments'] ?? null)) {
+            return null;
+        }
+
+        $attachments = [];
+
+        foreach ($payload['attachments'] as $attachment) {
+            if (is_array($attachment) && isset($attachment['file']) && is_string($attachment['file'])) {
+                $attachments[] = $attachment;
+            }
+        }
+
+        return [
+            'attachments' => $attachments,
+            'title' => isset($payload['title']) && is_string($payload['title']) ? $payload['title'] : null,
+        ];
+    }
+
+    /**
+     * @param list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
+     */
+    private function writeAttachmentCache(string $ticketId, array $attachments, ?string $title): void
+    {
+        $path = $this->attachmentCachePath($ticketId);
+
+        if ($path === null) {
+            return;
+        }
+
+        $directory = dirname($path);
+
+        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+            $this->logger->warning('Could not create Daktela ticket attachment cache directory.', [
+                'ticketId' => $ticketId,
+                'directory' => $directory,
+            ]);
+
+            return;
+        }
+
+        $payload = json_encode([
+            'title' => $title,
+            'attachments' => $attachments,
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        if (!is_string($payload)) {
+            $this->logger->warning('Could not encode Daktela ticket attachment cache payload.', [
+                'ticketId' => $ticketId,
+            ]);
+
+            return;
+        }
+
+        if (file_put_contents($path, $payload, LOCK_EX) === false) {
+            $this->logger->warning('Could not write Daktela ticket attachment cache file.', [
+                'ticketId' => $ticketId,
+                'path' => $path,
+            ]);
+        }
+    }
+
+    private function attachmentCachePath(string $ticketId): ?string
+    {
+        if ($this->cacheDir === null || trim($this->cacheDir) === '') {
+            return null;
+        }
+
+        return rtrim($this->cacheDir, '/\\') . '/daktela-ticket-attachments/' . hash('sha256', $ticketId) . '.json';
     }
 }

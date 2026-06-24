@@ -13,17 +13,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    document.querySelectorAll('.attachment-read-form').forEach((form) => {
+    document.querySelectorAll('.attachment-read-form, .attachment-refresh-form').forEach((form) => {
         form.addEventListener('submit', () => {
             const button = form.querySelector('button[type="submit"]');
             const loadingLabel = form.dataset.loadingLabel || 'Odczytuję...';
+            const showProcessingMessage = form.dataset.showProcessingMessage !== 'false';
 
             if (button !== null) {
                 button.disabled = true;
                 button.textContent = loadingLabel;
             }
 
-            if (processingMessage !== null) {
+            if (processingMessage !== null && showProcessingMessage) {
                 processingMessage.hidden = false;
             }
         });
