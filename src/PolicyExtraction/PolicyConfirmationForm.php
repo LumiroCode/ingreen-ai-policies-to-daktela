@@ -45,6 +45,14 @@ final class PolicyConfirmationForm
     /**
      * @return array<string,bool>
      */
+    public static function allLockedFields(): array
+    {
+        return array_fill_keys(self::FIELDS, true);
+    }
+
+    /**
+     * @return array<string,bool>
+     */
     public function lockedFields(): array
     {
         return $this->lockedFields;

@@ -163,10 +163,17 @@ final class WebhookApp
                     return [
                         'status' => 200,
                         'headers' => $this->accessGuard->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
-                        'body' => $this->renderPage($ticketId, $attachments, [
-                            'type' => 'success',
-                            'text' => 'Polisa została już kiedyś odczytana - wczytano zapisane dane.',
-                        ], $storedData, $attachmentIndex),
+                        'body' => $this->renderPage(
+                            $ticketId,
+                            $attachments,
+                            [
+                                'type' => 'success',
+                                'text' => 'Polisa została już kiedyś odczytana - wczytano zapisane dane.',
+                            ],
+                            $storedData,
+                            $attachmentIndex,
+                            PolicyConfirmationForm::allLockedFields()
+                        ),
                     ];
                 }
             }

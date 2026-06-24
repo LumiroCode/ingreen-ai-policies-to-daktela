@@ -183,6 +183,20 @@ function accessTokenFromHtml(string $html): string
     return html_entity_decode($matches[1], ENT_QUOTES, 'UTF-8');
 }
 
+function assertPolicyFieldLocked(string $html, string $field): void
+{
+    $fieldPattern = preg_quote($field, '/');
+
+    assertTrueValue(
+        preg_match('/name="policy_locked\[' . $fieldPattern . '\]"[^>]*\bchecked\b/s', $html) === 1,
+        'Expected policy lock checkbox to be checked for ' . $field . '.'
+    );
+    assertTrueValue(
+        preg_match('/name="policy_data\[' . $fieldPattern . '\]"[^>]*\breadonly\b/s', $html) === 1,
+        'Expected policy data input to be readonly for ' . $field . '.'
+    );
+}
+
 /**
  * @return array<string,string>
  */
@@ -732,6 +746,65 @@ test('configured utility origin allows signed in-app attachment request', functi
     assertTrueValue(str_contains($download['body'], 'value="yes"'));
     assertTrueValue(str_contains($download['body'], 'value="no"'));
     assertSameValue("%PDF-1.4\nbody", file_get_contents($dir . '/var/tmp/policies/files_scan.pdf'));
+});
+
+test('confirmed policy data loaded from cache is locked by default', function (): void {
+    $dir = tempDir();
+    $downloadCount = 0;
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/scan.pdf', 'title' => 'scan.pdf', 'type' => 'application/pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/files/scan.pdf' => function () use (&$downloadCount): array {
+            $downloadCount++;
+            return pdfResponse();
+        },
+    ]);
+    $app = app($fake, $dir);
+
+    $extracted = $app->handle('123', '0', daktelaAccessToken('123'));
+    $confirmed = $app->handle(
+        '123',
+        '0',
+        daktelaAccessToken('123'),
+        confirmation: 'yes',
+        policyData: [
+            'car_make' => 'Skoda',
+            'car_model' => 'Octavia',
+            'value' => '50 000 CZK',
+        ],
+        policyLocked: [
+            'car_make' => '1',
+            'car_model' => '1',
+            'value' => '1',
+        ]
+    );
+    $cached = $app->handle('123', '0', daktelaAccessToken('123'));
+
+    assertSameValue(200, $extracted['status']);
+    assertSameValue(200, $confirmed['status']);
+    assertSameValue(200, $cached['status']);
+    assertSameValue(1, $downloadCount, 'Expected cached policy read not to download the attachment again.');
+    assertTrueValue(
+        str_contains($cached['body'], 'Polisa została już kiedyś odczytana - wczytano zapisane dane.'),
+        'Expected policy data to be loaded from cache.'
+    );
+    assertPolicyFieldLocked($cached['body'], 'car_make');
+    assertPolicyFieldLocked($cached['body'], 'car_model');
+    assertPolicyFieldLocked($cached['body'], 'value');
+    assertTrueValue(str_contains($cached['body'], 'name="confirmation"'));
+    assertTrueValue(str_contains($cached['body'], 'value="yes"'));
+    assertTrueValue(
+        preg_match('/name="confirmation"[^>]*value="no"[^>]*\bdisabled\b/s', $cached['body']) === 1,
+        'Expected retry button to be disabled for cached locked policy data.'
+    );
 });
 
 test('configured utility key still requires Daktela tab signature', function (): void {
