@@ -56,7 +56,7 @@ $allLocked = $policyRows !== [] && count(array_intersect_key($selectedLockedFiel
                                 value="1"
                                 <?= $locked ? 'checked' : '' ?>
                             >
-                            <span>poprawne</span>
+                            <span>poprawne?</span>
                         </label>
                     </div>
                     <input

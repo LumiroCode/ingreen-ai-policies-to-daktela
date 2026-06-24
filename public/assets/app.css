@@ -39,7 +39,8 @@ input {
 }
 
 .app-shell {
-    display: grid;
+    display: flex;
+    flex-direction: column;
     gap: 10px;
     margin: 0 auto;
     max-width: 520px;
@@ -52,10 +53,12 @@ input {
     display: flex;
     gap: 10px;
     justify-content: space-between;
+    flex: 0 0 42px;
+    height: 42px;
 }
 
 .app-kicker {
-    color: var(--muted);
+    color: var(--text);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0;
@@ -94,6 +97,7 @@ h2 {
 }
 
 .panel,
+.toast,
 .status-message {
     background: var(--panel);
     border: 1px solid var(--line);
@@ -162,33 +166,81 @@ h2 {
     padding: 14px 10px;
 }
 
+.toast-stack {
+    display: grid;
+    gap: 8px;
+    position: fixed;
+    top: 8px;
+    left: 2vw;
+    right: 2vw;
+    z-index: 20;
+}
+
+.toast,
 .status-message {
     overflow-wrap: anywhere;
     padding: 9px 10px;
     white-space: pre-wrap;
 }
 
-.status-message.success {
+.toast {
+    align-items: flex-start;
+    box-shadow: 0 8px 24px rgba(16, 24, 40, 0.14);
+    display: grid;
+    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.toast.success {
     background: var(--primary-soft);
     border-color: #9ac8b8;
     color: #174d3f;
 }
 
+.toast.error,
 .status-message.error {
     background: var(--danger-soft);
     border-color: #e1aaa5;
     color: var(--danger);
 }
 
-.status-message.processing {
+.toast.processing {
     align-items: center;
     background: var(--info-soft);
     border-color: #abc5ed;
     color: var(--info);
-    display: flex;
-    gap: 8px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
 }
 
+.toast-text {
+    min-width: 0;
+}
+
+.toast-close {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    color: currentColor;
+    cursor: pointer;
+    display: flex;
+    flex: 0 0 auto;
+    font-size: 16px;
+    font-weight: 700;
+    height: 22px;
+    justify-content: center;
+    line-height: 1;
+    opacity: 0.72;
+    padding: 0;
+    width: 22px;
+}
+
+.toast-close:hover {
+    background: rgba(0, 0, 0, 0.06);
+    opacity: 1;
+}
+
+.toast[hidden],
 .status-message[hidden] {
     display: none;
 }

@@ -165,7 +165,7 @@ final class WebhookApp
                         'headers' => $this->accessGuard->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
                         'body' => $this->renderPage($ticketId, $attachments, [
                             'type' => 'success',
-                            'text' => 'Dane polisy zostały wczytane z cache.',
+                            'text' => 'Polisa została już kiedyś odczytana - wczytano zapisane dane.',
                         ], $storedData, $attachmentIndex),
                     ];
                 }
@@ -211,7 +211,7 @@ final class WebhookApp
                     $attachments,
                     [
                         'type' => 'success',
-                        'text' => 'Dane polisy zostały odczytane poprawnie. Sprawdź wartości przed zapisaniem do cache.',
+                        'text' => 'Dane polisy zostały odczytane przez AI. Sprawdź wartości przed zapisaniem do systemu.',
                     ],
                     $extractedData,
                     $attachmentIndex,
