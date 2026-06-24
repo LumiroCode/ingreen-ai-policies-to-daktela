@@ -235,11 +235,9 @@ h2 {
 .toast-stack {
     display: grid;
     gap: 8px;
-    position: fixed;
-    top: 8px;
-    left: 2vw;
-    right: 2vw;
+    position: relative;
     z-index: 20;
+    margin: 12px 12px 24px 12px;
 }
 
 .toast,
