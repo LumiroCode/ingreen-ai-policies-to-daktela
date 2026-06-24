@@ -136,7 +136,7 @@ h2 {
 .pdf-preview-panel {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
-    min-height: calc(100vh - 20px);
+    min-height: calc(100vh - 72px);
     position: sticky;
     top: 10px;
 }
