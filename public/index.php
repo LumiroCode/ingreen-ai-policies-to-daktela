@@ -44,7 +44,10 @@ try {
         $_SERVER['HTTP_REFERER'] ?? null,
         requestHeaders(),
         queryStringParam('dt'),
-        queryStringParam('sig')
+        queryStringParam('sig'),
+        queryStringParam('confirmation'),
+        queryArrayParam('policy_data'),
+        queryArrayParam('policy_locked')
     ));
 } catch (AppException $exception) {
     sendJson(['status' => $exception->statusCode(), 'body' => [
@@ -69,6 +72,28 @@ function queryStringParam(string $name): ?string
     $value = $_GET[$name] ?? null;
 
     return is_string($value) ? $value : null;
+}
+
+/**
+ * @return array<string,string>|null
+ */
+function queryArrayParam(string $name): ?array
+{
+    $value = $_GET[$name] ?? null;
+
+    if (!is_array($value)) {
+        return null;
+    }
+
+    $strings = [];
+
+    foreach ($value as $key => $item) {
+        if (is_string($key) && is_string($item)) {
+            $strings[$key] = $item;
+        }
+    }
+
+    return $strings;
 }
 
 /**

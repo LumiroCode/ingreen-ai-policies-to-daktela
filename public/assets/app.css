@@ -1,0 +1,355 @@
+:root {
+    color-scheme: light;
+    --bg: #f7f8fa;
+    --panel: #ffffff;
+    --text: #18202a;
+    --muted: #667085;
+    --line: #d7dde5;
+    --line-strong: #aeb8c5;
+    --primary: #116149;
+    --primary-hover: #0c4f3b;
+    --primary-soft: #e7f4ef;
+    --danger: #9f2d2d;
+    --danger-soft: #fff1f0;
+    --info: #244f8f;
+    --info-soft: #edf4ff;
+    --focus: #1f78d1;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    min-width: 320px;
+}
+
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.35;
+    margin: 0;
+}
+
+button,
+input {
+    font: inherit;
+}
+
+.app-shell {
+    display: grid;
+    gap: 10px;
+    margin: 0 auto;
+    max-width: 520px;
+    min-height: 100vh;
+    padding: 10px;
+}
+
+.app-header {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+}
+
+.app-kicker {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1;
+    margin: 0 0 2px;
+    text-transform: uppercase;
+}
+
+h1,
+h2,
+p {
+    margin: 0;
+}
+
+h1 {
+    font-size: 20px;
+    line-height: 1.1;
+}
+
+h2 {
+    font-size: 15px;
+    line-height: 1.2;
+}
+
+.ticket-pill,
+.count-badge {
+    background: #eef1f5;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    color: #344054;
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    padding: 6px 8px;
+}
+
+.panel,
+.status-message {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+
+.panel {
+    overflow: hidden;
+}
+
+.section-heading {
+    align-items: center;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    gap: 8px;
+    justify-content: space-between;
+    padding: 9px 10px;
+}
+
+.attachment-list {
+    display: grid;
+}
+
+.attachment-row {
+    align-items: center;
+    background: var(--panel);
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    margin: 0;
+    padding: 8px 10px;
+    text-align: left;
+}
+
+.attachment-row:last-child {
+    border-bottom: 0;
+}
+
+.attachment-row.selected {
+    background: var(--primary-soft);
+    box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.attachment-index {
+    align-items: center;
+    background: #eef1f5;
+    border-radius: 5px;
+    color: #475467;
+    display: flex;
+    font-size: 12px;
+    font-weight: 700;
+    height: 24px;
+    justify-content: center;
+    width: 24px;
+}
+
+.attachment-title {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.empty-state {
+    color: var(--muted);
+    padding: 14px 10px;
+}
+
+.status-message {
+    overflow-wrap: anywhere;
+    padding: 9px 10px;
+    white-space: pre-wrap;
+}
+
+.status-message.success {
+    background: var(--primary-soft);
+    border-color: #9ac8b8;
+    color: #174d3f;
+}
+
+.status-message.error {
+    background: var(--danger-soft);
+    border-color: #e1aaa5;
+    color: var(--danger);
+}
+
+.status-message.processing {
+    align-items: center;
+    background: var(--info-soft);
+    border-color: #abc5ed;
+    color: var(--info);
+    display: flex;
+    gap: 8px;
+}
+
+.status-message[hidden] {
+    display: none;
+}
+
+.spinner {
+    animation: spin 0.8s linear infinite;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    display: inline-block;
+    flex: 0 0 auto;
+    height: 14px;
+    width: 14px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.policy-review-form {
+    display: grid;
+    gap: 10px;
+    padding: 10px;
+}
+
+.policy-fields {
+    display: grid;
+    gap: 8px;
+}
+
+.policy-field {
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    display: grid;
+    gap: 6px;
+    padding: 8px;
+}
+
+.policy-field.locked {
+    background: var(--primary-soft);
+    border-color: #9ac8b8;
+}
+
+.field-topline {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+    justify-content: space-between;
+}
+
+.field-topline > label:first-child {
+    font-weight: 700;
+}
+
+.lock-control {
+    align-items: center;
+    color: var(--muted);
+    display: flex;
+    flex: 0 0 auto;
+    font-size: 12px;
+    gap: 5px;
+}
+
+.lock-control input {
+    height: 16px;
+    margin: 0;
+    width: 16px;
+}
+
+.policy-input {
+    background: #ffffff;
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    color: var(--text);
+    min-height: 34px;
+    min-width: 0;
+    padding: 7px 8px;
+    width: 100%;
+}
+
+.policy-input[readonly] {
+    background: #f4fbf8;
+    border-color: #9ac8b8;
+    color: #174d3f;
+}
+
+.policy-input:focus,
+.button:focus-visible,
+.lock-control input:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+}
+
+.action-bar {
+    bottom: 0;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 1fr 1fr;
+    position: sticky;
+}
+
+.button {
+    align-items: center;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    font-weight: 700;
+    justify-content: center;
+    min-height: 34px;
+    padding: 7px 10px;
+    text-align: center;
+    white-space: normal;
+}
+
+.button.primary {
+    background: var(--primary);
+    color: #ffffff;
+}
+
+.button.primary:hover {
+    background: var(--primary-hover);
+}
+
+.button.secondary {
+    background: #ffffff;
+    border-color: var(--line-strong);
+    color: #26323f;
+}
+
+.button.secondary:hover {
+    border-color: #7f8b99;
+}
+
+.button[disabled] {
+    cursor: default;
+    opacity: 0.55;
+}
+
+@media (max-width: 360px) {
+    body {
+        font-size: 13px;
+    }
+
+    .app-shell {
+        padding: 8px;
+    }
+
+    .attachment-row {
+        grid-template-columns: 22px minmax(0, 1fr);
+    }
+
+    .attachment-row .button {
+        grid-column: 2;
+        justify-self: start;
+        min-height: 30px;
+    }
+
+    .action-bar {
+        grid-template-columns: 1fr;
+    }
+}

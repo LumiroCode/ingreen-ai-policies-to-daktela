@@ -8,6 +8,8 @@ use Ingreen\DaktelaPolicy\Config\AppConfig;
 use Ingreen\DaktelaPolicy\Daktela\DaktelaClient;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData;
+use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyConfirmationForm;
+use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataCache;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataExtractor;
 use Ingreen\DaktelaPolicy\Support\AppException;
 use Throwable;
@@ -15,6 +17,7 @@ use Throwable;
 final class WebhookApp
 {
     private readonly WebhookAccessGuard $accessGuard;
+    private readonly PolicyDataCache $policyDataCache;
 
     public function __construct(
         private readonly AppConfig $config,
@@ -24,10 +27,13 @@ final class WebhookApp
         private readonly AppLogger $logger
     ) {
         $this->accessGuard = new WebhookAccessGuard($config, $logger);
+        $this->policyDataCache = new PolicyDataCache($config->varDir);
     }
 
     /**
      * @param array<string,string> $requestHeaders
+     * @param array<string,string>|null $policyData
+     * @param array<string,string>|null $policyLocked
      * @return array{status:int,headers:array<string,string>,body:string}
      */
     public function handle(
@@ -37,7 +43,10 @@ final class WebhookApp
         ?string $referrer = null,
         array $requestHeaders = [],
         ?string $daktelaTabDt = null,
-        ?string $daktelaTabSig = null
+        ?string $daktelaTabSig = null,
+        ?string $confirmation = null,
+        ?array $policyData = null,
+        ?array $policyLocked = null
     ): array
     {
         $requestId = bin2hex(random_bytes(8));
@@ -54,7 +63,34 @@ final class WebhookApp
             );
 
             if ($attachmentIndex !== null && trim($attachmentIndex) !== '') {
-                return $this->downloadSelectedTicketPdf($ticketId, $attachmentIndex, $requestId);
+                $confirmation = $confirmation !== null ? trim($confirmation) : null;
+                $confirmationForm = PolicyConfirmationForm::fromRequest($policyData, $policyLocked);
+
+                if ($confirmation === 'yes') {
+                    $validationMessage = $confirmationForm->validationMessage($confirmation);
+
+                    if ($validationMessage !== null) {
+                        return $this->invalidPolicyConfirmationResponse($ticketId, $attachmentIndex, $confirmationForm, $validationMessage);
+                    }
+
+                    return $this->confirmExtractedPolicyData($ticketId, $attachmentIndex, $confirmationForm);
+                }
+
+                if ($confirmation === 'no') {
+                    $validationMessage = $confirmationForm->validationMessage($confirmation);
+
+                    if ($validationMessage !== null) {
+                        return $this->invalidPolicyConfirmationResponse($ticketId, $attachmentIndex, $confirmationForm, $validationMessage);
+                    }
+                }
+
+                return $this->downloadSelectedTicketPdf(
+                    $ticketId,
+                    $attachmentIndex,
+                    $requestId,
+                    $confirmation === 'no',
+                    $confirmationForm
+                );
             }
 
             return $this->ticketPdfListResponse($ticketId);
@@ -107,12 +143,34 @@ final class WebhookApp
     /**
      * @return array{status:int,headers:array<string,string>,body:string}
      */
-    private function downloadSelectedTicketPdf(string $ticketId, string $attachmentIndex, string $requestId): array
+    private function downloadSelectedTicketPdf(
+        string $ticketId,
+        string $attachmentIndex,
+        string $requestId,
+        bool $forceExtraction = false,
+        ?PolicyConfirmationForm $confirmationForm = null
+    ): array
     {
         $attachments = $this->ticketPdfAttachments->forTicket($ticketId);
 
         try {
             $attachment = $this->ticketPdfAttachments->byIndex($attachments, $attachmentIndex);
+
+            if (!$forceExtraction) {
+                $storedData = $this->policyDataCache->confirmed($ticketId, $attachment);
+
+                if ($storedData !== null) {
+                    return [
+                        'status' => 200,
+                        'headers' => $this->accessGuard->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
+                        'body' => $this->renderPage($ticketId, $attachments, [
+                            'type' => 'success',
+                            'text' => 'Dane polisy zostały wczytane z cache.',
+                        ], $storedData, $attachmentIndex),
+                    ];
+                }
+            }
+
             $download = $this->daktela->download($attachment['file'], $this->config->maxDownloadBytes);
 
             if (!$this->looksLikePdf($download['body'], $download['contentType'], $attachment)) {
@@ -134,6 +192,8 @@ final class WebhookApp
             ]);
 
             $extractedData = $this->policyDataExtractor->extract($path);
+            $extractedData = $confirmationForm?->applyLockedValues($extractedData) ?? $extractedData;
+            $this->policyDataCache->savePending($ticketId, $attachment, $extractedData);
 
             $this->logger->info('Policy attachment processed with Claude extraction.', [
                 'requestId' => $requestId,
@@ -146,10 +206,17 @@ final class WebhookApp
             return [
                 'status' => 200,
                 'headers' => $this->accessGuard->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
-                'body' => $this->renderPage($ticketId, $attachments, [
-                    'type' => 'success',
-                    'text' => $this->extractionResultJson($extractedData),
-                ]),
+                'body' => $this->renderPage(
+                    $ticketId,
+                    $attachments,
+                    [
+                        'type' => 'success',
+                        'text' => 'Dane polisy zostały odczytane poprawnie. Sprawdź wartości przed zapisaniem do cache.',
+                    ],
+                    $extractedData,
+                    $attachmentIndex,
+                    $confirmationForm?->lockedFields() ?? []
+                ),
             ];
         } catch (AppException $exception) {
             $this->logger->warning('Policy attachment could not be stored or processed.', [
@@ -184,6 +251,88 @@ final class WebhookApp
                 ]),
             ];
         }
+    }
+
+    /**
+     * @return array{status:int,headers:array<string,string>,body:string}
+     */
+    private function confirmExtractedPolicyData(
+        string $ticketId,
+        string $attachmentIndex,
+        PolicyConfirmationForm $confirmationForm
+    ): array
+    {
+        $attachments = $this->ticketPdfAttachments->forTicket($ticketId);
+
+        try {
+            $attachment = $this->ticketPdfAttachments->byIndex($attachments, $attachmentIndex);
+            $extractedData = $confirmationForm->toPolicyData();
+
+            if ($extractedData === null) {
+                throw new AppException(404, 'policy_data_not_found', 'Extracted policy data was not found for confirmation.', [
+                    'ticket' => $ticketId,
+                    'attachment' => $attachmentIndex,
+                ]);
+            }
+
+            $this->policyDataCache->saveConfirmed($ticketId, $attachment, $extractedData);
+            $this->policyDataCache->deletePending($ticketId, $attachment);
+
+            return [
+                'status' => 200,
+                'headers' => $this->accessGuard->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
+                'body' => $this->renderPage(
+                    $ticketId,
+                    $attachments,
+                    [
+                        'type' => 'success',
+                        'text' => 'Zaakceptowane wartości zostały zapisane do cache.',
+                    ],
+                    $extractedData,
+                    $attachmentIndex,
+                    $confirmationForm->lockedFields()
+                ),
+            ];
+        } catch (AppException $exception) {
+            return [
+                'status' => $exception->statusCode(),
+                'headers' => $this->accessGuard->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
+                'body' => $this->renderPage($ticketId, $attachments, [
+                    'type' => 'error',
+                    'text' => $this->policyProcessingErrorMessage($exception),
+                ]),
+            ];
+        }
+    }
+
+    /**
+     * @return array{status:int,headers:array<string,string>,body:string}
+     */
+    private function invalidPolicyConfirmationResponse(
+        string $ticketId,
+        string $attachmentIndex,
+        PolicyConfirmationForm $confirmationForm,
+        string $message
+    ): array
+    {
+        $attachments = $this->ticketPdfAttachments->forTicket($ticketId);
+        $extractedData = $confirmationForm->toPolicyData();
+
+        return [
+            'status' => 422,
+            'headers' => $this->accessGuard->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
+            'body' => $this->renderPage(
+                $ticketId,
+                $attachments,
+                [
+                    'type' => 'error',
+                    'text' => $message,
+                ],
+                $extractedData,
+                $attachmentIndex,
+                $confirmationForm->lockedFields()
+            ),
+        ];
     }
 
     /**
@@ -229,16 +378,6 @@ final class WebhookApp
         return str_ends_with(strtolower($filename), '.pdf') ? $filename : $filename . '.pdf';
     }
 
-    private function extractionResultJson(ExtractedPolicyData $data): string
-    {
-        return json_encode([
-            'car_make' => $data->carMake,
-            'car_model' => $data->carModel,
-            'value' => $data->value,
-            'raw_response' => $data->rawResponse,
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
-    }
-
     private function policyProcessingErrorMessage(Throwable $exception): string
     {
         if (!$exception instanceof AppException) {
@@ -250,6 +389,7 @@ final class WebhookApp
             'attachment_too_large' => 'Plik polisy jest większy niż dozwolony limit.',
             'attachment_is_not_pdf' => 'Wybrany załącznik nie jest poprawnym plikiem PDF.',
             'policy_temp_dir_failed', 'policy_temp_write_failed', 'policy_pdf_not_readable' => 'Nie udało się zapisać pliku polisy do odczytu.',
+            'policy_data_storage_failed', 'policy_data_not_found' => 'Nie udało się zapisać potwierdzonych danych polisy.',
             'claude_policy_extraction_failed' => $this->claudePolicyExtractionErrorMessage($exception),
             'policy_extraction_parse_failed' => 'Claude zwrócił odpowiedź w nieoczekiwanym formacie.',
             default => 'Nie udało się przetworzyć pliku polisy.',
@@ -295,7 +435,14 @@ final class WebhookApp
     /**
      * @param list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
      */
-    private function renderPage(string $ticketId, array $attachments, ?array $message = null): string
+    private function renderPage(
+        string $ticketId,
+        array $attachments,
+        ?array $message = null,
+        ?ExtractedPolicyData $extractedData = null,
+        ?string $selectedAttachmentIndex = null,
+        array $selectedLockedFields = []
+    ): string
     {
         $accessToken = $this->accessGuard->accessTokenForTicket($ticketId);
         ob_start();

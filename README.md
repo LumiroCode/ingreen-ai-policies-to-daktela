@@ -66,7 +66,7 @@ Smoke test:
 curl 'http://127.0.0.1:8080?ticket=123'
 ```
 
-The ticket URL returns an HTML table with PDF attachments. The `odczytaj` button requests the selected attachment and returns it inline as `application/pdf`.
+The ticket URL returns a compact HTML utility with PDF attachments. The `Odczytaj` button requests the selected attachment, extracts policy data, and renders the review form inline.
 
 ## Daktela Utility Access Restriction
 
@@ -128,7 +128,7 @@ The app is intentionally small:
 - `src/TicketPdfAttachments.php` resolves PDF attachments related to a Daktela ticket.
 - `src/PolicyExtraction` contains the PDF-to-policy-data extraction interface and Claude implementation.
 - `src/Daktela/DaktelaClient.php` performs authenticated Daktela JSON and file requests.
-- `templates/pdf-attachments-table.php` renders the attachment list.
+- `templates/pdf-attachments-table.php` renders the compact attachment list.
 - `src/Config`, `src/Logging`, and `src/Support` contain config loading, daily logs, and directory/error helpers.
 
 ## Current Scope

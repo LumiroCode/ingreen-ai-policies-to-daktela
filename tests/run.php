@@ -362,11 +362,13 @@ test('ticket PDF list renders table and does not download files', function (): v
 
     assertSameValue(200, $response['status']);
     assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
-    assertTrueValue(str_contains($response['body'], '<td>scan.pdf</td>'));
-    assertTrueValue(str_contains($response['body'], '<td>policy.pdf</td>'));
+    assertTrueValue(str_contains($response['body'], 'scan.pdf'));
+    assertTrueValue(str_contains($response['body'], 'policy.pdf'));
+    assertTrueValue(str_contains($response['body'], 'class="attachment-row attachment-read-form'));
+    assertTrueValue(str_contains($response['body'], 'data-loading-label="Odczytuję..."'));
     assertTrueValue(str_contains($response['body'], 'id="processing-message"'));
     assertTrueValue(str_contains($response['body'], 'Trwa odczyt danych z polisy.'));
-    assertTrueValue(str_contains($response['body'], "button.textContent = 'odczytuję...'"));
+    assertTrueValue(str_contains(file_get_contents(dirname(__DIR__) . '/public/assets/app.js'), 'button.textContent = loadingLabel;'));
     assertTrueValue(!str_contains($response['body'], 'readme.txt'));
     assertSameValue(0, $downloadCount);
 });
@@ -407,8 +409,8 @@ test('ticket PDF list includes PDFs from ticket activities attachments', functio
     );
 
     assertSameValue(200, $response['status']);
-    assertTrueValue(str_contains($response['body'], '<td>activity-first.pdf</td>'));
-    assertTrueValue(str_contains($response['body'], '<td>activity-second.pdf</td>'));
+    assertTrueValue(str_contains($response['body'], 'activity-first.pdf'));
+    assertTrueValue(str_contains($response['body'], 'activity-second.pdf'));
     assertTrueValue(!str_contains($response['body'], 'readme.txt'));
     assertTrueValue(in_array('/api/v6/tickets/123/activities', $requestPaths, true));
     assertTrueValue(!in_array('/api/v6/activities', $requestPaths, true));
@@ -448,7 +450,7 @@ test('ticket PDF list includes activity attachment with numeric file id', functi
     $response = signedEntryRequest(app($fake, tempDir()), '15242');
 
     assertSameValue(200, $response['status']);
-    assertTrueValue(str_contains($response['body'], '<td>przykladowa_polisa_ubezpieczenia_samochodu.pdf</td>'));
+    assertTrueValue(str_contains($response['body'], 'przykladowa_polisa_ubezpieczenia_samochodu.pdf'));
 });
 
 test('selected email activity attachment downloads through Daktela file mapper', function (): void {
@@ -561,7 +563,7 @@ test('ticket PDF list includes PDFs from nested activity item attachments', func
     $response = signedEntryRequest(app($fake, tempDir()), '123');
 
     assertSameValue(200, $response['status']);
-    assertTrueValue(str_contains($response['body'], '<td>nested-policy.pdf</td>'));
+    assertTrueValue(str_contains($response['body'], 'nested-policy.pdf'));
     assertTrueValue(!str_contains($response['body'], 'item-readme.txt'));
 });
 
@@ -716,9 +718,19 @@ test('configured utility origin allows signed in-app attachment request', functi
 
     assertSameValue(200, $download['status']);
     assertSameValue('text/html; charset=UTF-8', $download['headers']['Content-Type']);
-    assertTrueValue(str_contains($download['body'], '&quot;car_make&quot;:&quot;Skoda&quot;'));
-    assertTrueValue(str_contains($download['body'], '&quot;car_model&quot;:&quot;Octavia&quot;'));
-    assertTrueValue(str_contains($download['body'], '&quot;value&quot;:&quot;50 000 CZK&quot;'));
+    assertTrueValue(str_contains($download['body'], 'Marka'));
+    assertTrueValue(str_contains($download['body'], 'Model'));
+    assertTrueValue(str_contains($download['body'], 'Wartość'));
+    assertTrueValue(str_contains($download['body'], 'name="policy_data[car_make]"'));
+    assertTrueValue(str_contains($download['body'], 'name="policy_data[car_model]"'));
+    assertTrueValue(str_contains($download['body'], 'name="policy_data[value]"'));
+    assertTrueValue(str_contains($download['body'], 'value="Skoda"'));
+    assertTrueValue(str_contains($download['body'], 'value="Octavia"'));
+    assertTrueValue(str_contains($download['body'], 'value="50 000 CZK"'));
+    assertTrueValue(str_contains($download['body'], 'name="policy_locked[car_make]"'));
+    assertTrueValue(str_contains($download['body'], 'name="confirmation"'));
+    assertTrueValue(str_contains($download['body'], 'value="yes"'));
+    assertTrueValue(str_contains($download['body'], 'value="no"'));
     assertSameValue("%PDF-1.4\nbody", file_get_contents($dir . '/var/tmp/policies/files_scan.pdf'));
 });
 
@@ -799,9 +811,12 @@ test('selected PDF attachment is stored only after clicking read', function (): 
 
     assertSameValue(200, $download['status']);
     assertSameValue('text/html; charset=UTF-8', $download['headers']['Content-Type']);
-    assertTrueValue(str_contains($download['body'], '&quot;car_make&quot;:&quot;Skoda&quot;'));
-    assertTrueValue(str_contains($download['body'], '&quot;car_model&quot;:&quot;Octavia&quot;'));
-    assertTrueValue(str_contains($download['body'], '&quot;value&quot;:&quot;50 000 CZK&quot;'));
+    assertTrueValue(str_contains($download['body'], 'name="policy_data[car_make]"'));
+    assertTrueValue(str_contains($download['body'], 'name="policy_data[car_model]"'));
+    assertTrueValue(str_contains($download['body'], 'name="policy_data[value]"'));
+    assertTrueValue(str_contains($download['body'], 'value="Skoda"'));
+    assertTrueValue(str_contains($download['body'], 'value="Octavia"'));
+    assertTrueValue(str_contains($download['body'], 'value="50 000 CZK"'));
     assertSameValue("%PDF-1.4\nsecond", file_get_contents($dir . '/var/tmp/policies/policy-456.pdf'));
     assertSameValue(['second'], $downloads);
 });
@@ -825,7 +840,7 @@ test('selected PDF attachment storage error renders message under table', functi
 
     assertSameValue(502, $response['status']);
     assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
-    assertTrueValue(str_contains($response['body'], '<td>not-pdf.pdf</td>'));
+    assertTrueValue(str_contains($response['body'], 'not-pdf.pdf'));
     assertTrueValue(str_contains($response['body'], 'Nie udało się pobrać pliku polisy z Dakteli.'));
 });
 
@@ -849,7 +864,7 @@ test('selected PDF attachment extraction error renders message under table', fun
 
     assertSameValue(500, $response['status']);
     assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
-    assertTrueValue(str_contains($response['body'], '<td>policy.pdf</td>'));
+    assertTrueValue(str_contains($response['body'], 'policy.pdf'));
     assertTrueValue(str_contains($response['body'], 'Wystąpił nieoczekiwany błąd podczas odczytu danych z polisy.'));
 });
 
@@ -873,7 +888,7 @@ test('selected PDF attachment Claude extraction error renders Claude message und
 
     assertSameValue(502, $response['status']);
     assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
-    assertTrueValue(str_contains($response['body'], '<td>policy.pdf</td>'));
+    assertTrueValue(str_contains($response['body'], 'policy.pdf'));
     assertTrueValue(str_contains($response['body'], 'Nie udało się odczytać danych z polisy przez Claude.'));
 });
 
@@ -910,7 +925,7 @@ test('selected PDF attachment Claude extraction error renders Anthropic error me
 
     assertSameValue(502, $response['status']);
     assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
-    assertTrueValue(str_contains($response['body'], '<td>policy.pdf</td>'));
+    assertTrueValue(str_contains($response['body'], 'policy.pdf'));
     assertTrueValue(str_contains($response['body'], 'Your credit balance is too low to access the Anthropic API.'));
     assertTrueValue(!str_contains($response['body'], 'Nie udało się odczytać danych z polisy przez Claude.'));
 });

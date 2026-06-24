@@ -5,78 +5,44 @@ declare(strict_types=1);
 /**
  * @var list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
  * @var string $accessToken
+ * @var string|null $selectedAttachmentIndex
  * @var string $ticketId
  */
 
 ?>
 
-<style>
-    table {
-        border-collapse: collapse;
-        min-width: 560px;
-    }
+<section class="panel attachment-panel" aria-labelledby="attachments-heading">
+    <div class="section-heading">
+        <h2 id="attachments-heading">Załączniki PDF</h2>
+        <span class="count-badge"><?= count($attachments) ?></span>
+    </div>
 
-    th,
-    td {
-        border: 1px solid #d0d0d0;
-        padding: 8px 10px;
-        text-align: left;
-    }
+    <?php if ($attachments === []): ?>
+        <p class="empty-state">Brak załączników PDF.</p>
+    <?php endif; ?>
 
-    th {
-        background: #f4f4f4;
-    }
-
-    button {
-        cursor: default;
-        padding: 6px 12px;
-    }
-
-    button[disabled] {
-        opacity: 0.7;
-    }
-</style>
-
-<script>
-    function readAttachmentButtonHandler(form) {
-        const button = form.querySelector('button[type="submit"]');
-        const message = document.getElementById('feedback-message');
-
-        if (button !== null) {
-            button.disabled = true;
-            button.textContent = 'odczytuję...';
-        }
-    }
-</script>
-
-<table>
-    <thead>
-        <tr>
-            <th>Nr</th>
-            <th>Nazwa</th>
-            <th>Akcja</th>
-        </tr>
-    </thead>
-    <tbody>
-        <?php if ($attachments === []): ?>
-            <tr>
-                <td colspan="3">Brak załączników PDF.</td>
-            </tr>
-        <?php endif; ?>
-
-        <?php foreach ($attachments as $index => $attachment): ?>
-            <tr>
-                <td><?= $index + 1 ?></td>
-                <td><?= htmlspecialchars($attachment['title'] ?? basename($attachment['file']), ENT_QUOTES, 'UTF-8') ?></td>
-                <td>
-                    <form method="get" onsubmit="readAttachmentButtonHandler(this)">
-                        <input type="hidden" name="ticket" value="<?= htmlspecialchars($ticketId, ENT_QUOTES, 'UTF-8') ?>">
-                        <input type="hidden" name="attachment" value="<?= $index ?>">
-                        <input type="hidden" name="access_token" value="<?= htmlspecialchars($accessToken, ENT_QUOTES, 'UTF-8') ?>">
-                        <button type="submit">odczytaj</button>
-                    </form>
-                </td>
-            </tr>
-        <?php endforeach; ?>
-    </tbody>
-</table>
+    <?php if ($attachments !== []): ?>
+        <div class="attachment-list">
+            <?php foreach ($attachments as $index => $attachment): ?>
+                <?php
+                    $attachmentTitle = $attachment['title'] ?? basename($attachment['file']);
+                    $isSelected = (string) $index === (string) $selectedAttachmentIndex;
+                ?>
+                <form
+                    class="attachment-row attachment-read-form<?= $isSelected ? ' selected' : '' ?>"
+                    method="get"
+                    data-loading-label="Odczytuję..."
+                >
+                    <input type="hidden" name="ticket" value="<?= htmlspecialchars($ticketId, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="attachment" value="<?= $index ?>">
+                    <input type="hidden" name="access_token" value="<?= htmlspecialchars($accessToken, ENT_QUOTES, 'UTF-8') ?>">
+                    <div class="attachment-index"><?= $index + 1 ?></div>
+                    <div class="attachment-title">
+                        <?= htmlspecialchars($attachmentTitle, ENT_QUOTES, 'UTF-8') ?>
+                    </div>
+                    <button class="button secondary" type="submit">Odczytaj</button>
+                </form>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
+</section>
