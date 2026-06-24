@@ -7,14 +7,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.querySelectorAll('.toast').forEach((toast) => {
         const closeButton = toast.querySelector('.toast-close');
-        const autoCloseDelay = Number.parseInt(toast.dataset.autoclose || '', 10);
 
         if (closeButton !== null) {
             closeButton.addEventListener('click', () => closeToast(toast));
-        }
-
-        if (Number.isFinite(autoCloseDelay) && autoCloseDelay > 0) {
-            window.setTimeout(() => closeToast(toast), autoCloseDelay);
         }
     });
 
