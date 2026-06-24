@@ -73,6 +73,8 @@ final class WebhookApp
                     'error' => [
                         'code' => $exception->errorCode(),
                         'message' => $exception->getMessage(),
+                        'dt' => $daktelaTabDt,
+                        'sig' => $daktelaTabSig,
                     ],
                 ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
             ];

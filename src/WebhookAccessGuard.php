@@ -11,7 +11,6 @@ use Ingreen\DaktelaPolicy\Support\AppException;
 final class WebhookAccessGuard
 {
     private const ACCESS_TOKEN_TTL_SECONDS = 900;
-    private const DAKTELA_TAB_DT_FORMAT = 'YmdHis';
     private const DAKTELA_TAB_ALLOWED_SKEW_SECONDS = 5;
 
     public function __construct(
@@ -62,40 +61,14 @@ final class WebhookAccessGuard
             return null;
         }
 
-        $y = (int) substr($dt, 0, 4);
-        $mo = (int) substr($dt, 4, 2);
-        $d = (int) substr($dt, 6, 2);
-        $h = (int) substr($dt, 8, 2);
-        $mi = (int) substr($dt, 10, 2);
-        $s = (int) substr($dt, 12, 2);
+        $t = (int) $dt;
         $n = (int) $ticket;
 
-        $p1 = intdiv(
-            ($y * 131)
-            + ($mo * 197)
-            + ($d * 389)
-            + ($h * 769)
-            + ($mi * 1543)
-            + ($s * 6151)
-            + ($n * 3079)
-            + 88237,
-            3
-        );
+        $p1 = 10000 + (((($n + 6123) * ($t + 5659)) + 2482) % 90000);
+        $p2 = 10000 + (((($n + 5994) * ($t + 3437)) + 6426) % 90000);
+        $p3 = 10000 + (((($n + 9154) ** 2) + (($t + 5083) * 4022)) % 90000);
 
-        $p2 = intdiv(
-            (($n + 7919) * ($s + 37))
-            + ($mi * 65537)
-            + ($h * 8191)
-            + 4289843,
-            5
-        );
-
-        $p3 = intdiv(
-            (($y + $mo + $d + $h + $mi + $s + $n + 104729) * 7919),
-            7
-        );
-
-        return sprintf('%08d.%08d.%08d', $p1, $p2, $p3);
+        return sprintf('%d-%d-%d', $p1, $p2, $p3);
     }
 
     public function accessTokenForTicket(string $ticketId): string
@@ -429,28 +402,19 @@ final class WebhookAccessGuard
             return false;
         }
 
-        $requestTime = \DateTimeImmutable::createFromFormat('!' . self::DAKTELA_TAB_DT_FORMAT, $dt, new \DateTimeZone('UTC'));
-
-        if (!$requestTime instanceof \DateTimeImmutable) {
-            return false;
-        }
-
-        $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
-        $age = abs($now->getTimestamp() - $requestTime->getTimestamp());
+        $age = abs(time() - (int) $dt);
 
         return $age <= self::DAKTELA_TAB_ALLOWED_SKEW_SECONDS;
     }
 
     private function isValidDaktelaTabDt(string $dt): bool
     {
-        if (!preg_match('/^\d{14}$/', $dt)) {
+        if (!preg_match('/^\d{10,}$/', $dt)) {
             return false;
         }
 
-        $date = \DateTimeImmutable::createFromFormat('!' . self::DAKTELA_TAB_DT_FORMAT, $dt, new \DateTimeZone('UTC'));
-
-        return $date instanceof \DateTimeImmutable
-            && $date->format(self::DAKTELA_TAB_DT_FORMAT) === $dt;
+        return strlen($dt) < strlen((string) PHP_INT_MAX)
+            || (strlen($dt) === strlen((string) PHP_INT_MAX) && strcmp($dt, (string) PHP_INT_MAX) <= 0);
     }
 
     private function isAllowedReferrer(string $referrer): bool

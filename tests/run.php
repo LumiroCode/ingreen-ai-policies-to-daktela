@@ -211,7 +211,7 @@ function daktelaTabParams(string $ticketId, int $secondOffset = 0): array
 {
     $dt = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
         ->modify(($secondOffset >= 0 ? '+' : '') . $secondOffset . ' seconds')
-        ->format('YmdHis');
+        ->format('U');
     $config = new AppConfig('https://daktela.example', 'api-token', null, sys_get_temp_dir(), sys_get_temp_dir());
     $sig = (new WebhookAccessGuard($config))->makeDaktelaTabSig($dt, $ticketId);
 
@@ -285,7 +285,7 @@ test('Daktela tab signature matches helper formula with seconds', function (): v
     $config = new AppConfig('https://daktela.example', 'api-token', null, tempDir() . '/var', tempDir() . '/cache');
     $guard = new WebhookAccessGuard($config);
 
-    assertSameValue('00359166.01407652.121045308', $guard->makeDaktelaTabSig('20260624153045', '123'));
+    assertSameValue('89666-30820-47545', $guard->makeDaktelaTabSig('1782315045', '123'));
 });
 
 test('access guard logs denied attempts with diagnostic reasons', function (): void {
@@ -301,7 +301,7 @@ test('access guard logs denied attempts with diagnostic reasons', function (): v
             'https://evil.example/tickets/123',
             daktelaFrameHeadersWith(['Referer' => 'https://evil.example/tickets/123']),
             $tab['dt'],
-            '00000000.00000000.00000000'
+            '00000-00000-00000'
         );
     } catch (AppException $exception) {
         assertSameValue(403, $exception->statusCode());
@@ -641,7 +641,7 @@ test('configured utility origin rejects stale Daktela tab timestamp', function (
 test('configured utility origin rejects wrong Daktela tab signature', function (): void {
     $tab = daktelaTabParams('123');
     $response = app(new FakeDaktela([]), tempDir(), 'https://ingreen.daktela.com')
-        ->handle('123', null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders(), $tab['dt'], '00000000.00000000.00000000');
+        ->handle('123', null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders(), $tab['dt'], '00000-00000-00000');
     $payload = errorBody($response);
 
     assertSameValue(403, $response['status']);

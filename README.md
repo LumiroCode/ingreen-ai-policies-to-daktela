@@ -79,7 +79,7 @@ Set `allowedUtilityOrigin` to the Daktela origin that is allowed to load this ap
 Then include the ticket id, timestamp, and signature in the initial iframe URL:
 
 ```html
-<iframe src="https://your-app.example/?ticket=123&dt=20260624153045&sig=00000000.00000000.00000000"></iframe>
+<iframe src="https://your-app.example/?ticket={{name}}&dt={{fn.time()}}&sig={{fn.sprintf('%d-%d-%d',10000+(((name+6123)*(fn.time()+5659)+2482)%90000),10000+(((name+5994)*(fn.time()+3437)+6426)%90000),10000+((fn.pow(name+9154,2)+(fn.time()+5083)*4022)%90000))}}"></iframe>
 ```
 
 When configured, the app:
