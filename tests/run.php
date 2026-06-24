@@ -736,6 +736,8 @@ test('configured utility origin allows signed in-app attachment request', functi
 
     assertSameValue(200, $download['status']);
     assertSameValue('text/html; charset=UTF-8', $download['headers']['Content-Type']);
+    assertTrueValue(str_contains($download['body'], 'Dane polisy'));
+    assertTrueValue(str_contains($download['body'], 'scan.pdf'));
     assertTrueValue(str_contains($download['body'], 'Marka'));
     assertTrueValue(str_contains($download['body'], 'Model'));
     assertTrueValue(str_contains($download['body'], 'Wartość'));
@@ -745,6 +747,8 @@ test('configured utility origin allows signed in-app attachment request', functi
     assertTrueValue(str_contains($download['body'], 'value="Skoda"'));
     assertTrueValue(str_contains($download['body'], 'value="Octavia"'));
     assertTrueValue(str_contains($download['body'], 'value="50 000 CZK"'));
+    assertTrueValue(str_contains($download['body'], 'class="policy-review-lock-all"'));
+    assertTrueValue(str_contains($download['body'], 'wszystkie poprawne?'));
     assertTrueValue(str_contains($download['body'], 'name="policy_locked[car_make]"'));
     assertTrueValue(str_contains($download['body'], 'name="confirmation"'));
     assertTrueValue(str_contains($download['body'], 'value="yes"'));
@@ -803,6 +807,10 @@ test('confirmed policy data loaded from cache is locked by default', function ()
     assertPolicyFieldLocked($cached['body'], 'car_make');
     assertPolicyFieldLocked($cached['body'], 'car_model');
     assertPolicyFieldLocked($cached['body'], 'value');
+    assertTrueValue(
+        preg_match('/class="policy-review-lock-all"[^>]*\bchecked\b/s', $cached['body']) === 1,
+        'Expected master policy lock checkbox to be checked for cached locked policy data.'
+    );
     assertTrueValue(str_contains($cached['body'], 'name="confirmation"'));
     assertTrueValue(str_contains($cached['body'], 'value="yes"'));
     assertTrueValue(
@@ -977,6 +985,7 @@ test('selected PDF attachment is stored only after clicking read', function (): 
     assertTrueValue(str_contains($download['body'], 'value="Skoda"'));
     assertTrueValue(str_contains($download['body'], 'value="Octavia"'));
     assertTrueValue(str_contains($download['body'], 'value="50 000 CZK"'));
+    assertTrueValue(str_contains($download['body'], 'second.pdf'));
     assertSameValue("%PDF-1.4\nsecond", file_get_contents($dir . '/var/tmp/policies/policy-456.pdf'));
     assertSameValue(['second'], $downloads);
 });

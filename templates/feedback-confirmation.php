@@ -9,6 +9,7 @@ declare(strict_types=1);
  * @var array<string,bool> $selectedLockedFields
  * @var string $ticketId
  * @var string $ticketTitle
+ * @var list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
  */
 
 $policyRows = [];
@@ -22,12 +23,23 @@ if ($extractedData instanceof \Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedP
 }
 
 $allLocked = $policyRows !== [] && count(array_intersect_key($selectedLockedFields, $policyRows)) === count($policyRows);
+$selectedAttachment = $selectedAttachmentIndex !== null && ctype_digit($selectedAttachmentIndex)
+    ? ($attachments[(int) $selectedAttachmentIndex] ?? null)
+    : null;
+$selectedAttachmentTitle = is_array($selectedAttachment)
+    ? (string) ($selectedAttachment['title'] ?? basename($selectedAttachment['file']))
+    : null;
 ?>
 
 <?php if ($policyRows !== []): ?>
 <section class="panel review-panel" aria-labelledby="review-heading">
     <div class="section-heading">
-        <h2 id="review-heading">Dane polisy</h2>
+        <div class="review-title">
+            <h2 id="review-heading">Dane polisy</h2>
+            <?php if ($selectedAttachmentTitle !== null && trim($selectedAttachmentTitle) !== ''): ?>
+                <p><?= htmlspecialchars($selectedAttachmentTitle, ENT_QUOTES, 'UTF-8') ?></p>
+            <?php endif; ?>
+        </div>
         <span class="count-badge"><?= count($policyRows) ?></span>
     </div>
 
@@ -38,6 +50,16 @@ $allLocked = $policyRows !== [] && count(array_intersect_key($selectedLockedFiel
         <input type="hidden" name="access_token" value="<?= htmlspecialchars($accessToken, ENT_QUOTES, 'UTF-8') ?>">
 
         <div class="policy-fields">
+            <label class="lock-control lock-control-all" for="policy-lock-all">
+                <input
+                    id="policy-lock-all"
+                    class="policy-review-lock-all"
+                    type="checkbox"
+                    <?= $allLocked ? 'checked' : '' ?>
+                >
+                <span>wszystkie poprawne?</span>
+            </label>
+
             <?php foreach ($policyRows as $key => $row): ?>
                 <?php
                     $locked = $selectedLockedFields[$key] ?? false;

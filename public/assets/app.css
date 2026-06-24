@@ -130,6 +130,19 @@ h2 {
     padding: 9px 10px;
 }
 
+.review-title {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.review-title p {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
 .attachment-list {
     display: grid;
 }
@@ -323,6 +336,17 @@ h2 {
     height: 16px;
     margin: 0;
     width: 16px;
+}
+
+.lock-control-all {
+    background: #f8fafc;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    color: var(--text);
+    font-weight: 700;
+    justify-content: flex-end;
+    min-height: 34px;
+    padding: 8px;
 }
 
 .policy-input {

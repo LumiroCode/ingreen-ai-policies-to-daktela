@@ -32,11 +32,13 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.policy-review-form').forEach((form) => {
         const feedback = form.querySelector('.policy-review-feedback');
         const locks = Array.from(form.querySelectorAll('.policy-review-lock'));
+        const lockAll = form.querySelector('.policy-review-lock-all');
         const saveButton = form.querySelector('button[name="confirmation"][value="yes"]');
         const retryButton = form.querySelector('button[name="confirmation"][value="no"]');
 
         const sync = () => {
             const allLocked = locks.length > 0 && locks.every((checkbox) => checkbox.checked);
+            const someLocked = locks.some((checkbox) => checkbox.checked);
 
             locks.forEach((checkbox) => {
                 const field = checkbox.closest('.policy-field');
@@ -50,6 +52,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     input.readOnly = checkbox.checked;
                 }
             });
+
+            if (lockAll !== null) {
+                lockAll.checked = allLocked;
+                lockAll.indeterminate = someLocked && !allLocked;
+            }
 
             if (saveButton !== null) {
                 saveButton.disabled = !allLocked;
@@ -70,6 +77,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 sync();
             });
         });
+
+        if (lockAll !== null) {
+            lockAll.addEventListener('change', () => {
+                if (feedback !== null) {
+                    feedback.hidden = true;
+                    feedback.textContent = '';
+                }
+
+                locks.forEach((checkbox) => {
+                    checkbox.checked = lockAll.checked;
+                });
+
+                sync();
+            });
+        }
 
         form.addEventListener('submit', (event) => {
             const allLocked = locks.length > 0 && locks.every((checkbox) => checkbox.checked);
