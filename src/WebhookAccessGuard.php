@@ -12,6 +12,7 @@ final class WebhookAccessGuard
 {
     private const ACCESS_TOKEN_TTL_SECONDS = 900;
     private const DAKTELA_TAB_DT_FORMAT = 'YmdHis';
+    private const DAKTELA_TAB_ALLOWED_SKEW_SECONDS = 5;
 
     public function __construct(
         private readonly AppConfig $config,
@@ -82,9 +83,9 @@ final class WebhookAccessGuard
         );
 
         $p2 = intdiv(
-            (($n + 7919) * ($mi + 37))
-            + (($s + 17) * 131071)
-            + ($h * 65537)
+            (($n + 7919) * ($s + 37))
+            + ($mi * 65537)
+            + ($h * 8191)
             + 4289843,
             5
         );
@@ -428,20 +429,16 @@ final class WebhookAccessGuard
             return false;
         }
 
-        $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
-        $requestSecond = (int) substr($dt, 12, 2);
+        $requestTime = \DateTimeImmutable::createFromFormat('!' . self::DAKTELA_TAB_DT_FORMAT, $dt, new \DateTimeZone('UTC'));
 
-        for ($hourOffset = 0; $hourOffset <= 2; $hourOffset++) {
-            $candidate = $now->modify('+' . $hourOffset . ' hours');
-
-            if ($candidate->format('YmdHi') === substr($dt, 0, 12)
-                && abs((int) $candidate->format('s') - $requestSecond) <= 1
-            ) {
-                return true;
-            }
+        if (!$requestTime instanceof \DateTimeImmutable) {
+            return false;
         }
 
-        return false;
+        $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $age = abs($now->getTimestamp() - $requestTime->getTimestamp());
+
+        return $age <= self::DAKTELA_TAB_ALLOWED_SKEW_SECONDS;
     }
 
     private function isValidDaktelaTabDt(string $dt): bool
