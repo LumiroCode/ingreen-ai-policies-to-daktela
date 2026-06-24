@@ -7,6 +7,7 @@ declare(strict_types=1);
  * @var string $accessToken
  * @var string|null $selectedAttachmentIndex
  * @var string $ticketId
+ * @var string $ticketTitle
  */
 
 ?>
@@ -34,6 +35,7 @@ declare(strict_types=1);
                     data-loading-label="Odczytuję..."
                 >
                     <input type="hidden" name="ticket" value="<?= htmlspecialchars($ticketId, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="title" value="<?= htmlspecialchars($ticketTitle, ENT_QUOTES, 'UTF-8') ?>">
                     <input type="hidden" name="attachment" value="<?= $index ?>">
                     <input type="hidden" name="access_token" value="<?= htmlspecialchars($accessToken, ENT_QUOTES, 'UTF-8') ?>">
                     <div class="attachment-index"><?= $index + 1 ?></div>

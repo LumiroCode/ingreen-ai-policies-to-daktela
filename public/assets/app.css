@@ -41,20 +41,19 @@ input {
 .app-shell {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     margin: 0 auto;
-    max-width: 520px;
+    max-width: 1024px;
     min-height: 100vh;
     padding: 10px;
 }
 
 .app-header {
-    align-items: center;
+    flex: 0 0 auto;
+    gap: 6px;
+    min-width: 0;
     display: flex;
-    gap: 10px;
-    justify-content: space-between;
-    flex: 0 0 42px;
-    height: 42px;
+    flex-direction: column;
 }
 
 .app-kicker {
@@ -78,12 +77,26 @@ h1 {
     line-height: 1.1;
 }
 
+.ticket-title {
+    font-size: 18px;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+    padding: 6px 0;
+}
+
+.ticket-debug {
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.2;
+    margin-top: 3px;
+    overflow-wrap: anywhere;
+}
+
 h2 {
     font-size: 15px;
     line-height: 1.2;
 }
 
-.ticket-pill,
 .count-badge {
     background: #eef1f5;
     border: 1px solid var(--line);

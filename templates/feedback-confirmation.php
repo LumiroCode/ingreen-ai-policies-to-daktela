@@ -8,6 +8,7 @@ declare(strict_types=1);
  * @var string|null $selectedAttachmentIndex
  * @var array<string,bool> $selectedLockedFields
  * @var string $ticketId
+ * @var string $ticketTitle
  */
 
 $policyRows = [];
@@ -32,6 +33,7 @@ $allLocked = $policyRows !== [] && count(array_intersect_key($selectedLockedFiel
 
     <form class="policy-review-form" method="get" novalidate>
         <input type="hidden" name="ticket" value="<?= htmlspecialchars($ticketId, ENT_QUOTES, 'UTF-8') ?>">
+        <input type="hidden" name="title" value="<?= htmlspecialchars($ticketTitle, ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="attachment" value="<?= htmlspecialchars((string) $selectedAttachmentIndex, ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="access_token" value="<?= htmlspecialchars($accessToken, ENT_QUOTES, 'UTF-8') ?>">
 

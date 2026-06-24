@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 /**
  * @var string $ticketId
+ * @var string $ticketTitle
  * @var array{type:string,text:string}|null $message
  */
 
@@ -34,10 +35,9 @@ declare(strict_types=1);
     </div>
     <main class="app-shell">
         <header class="app-header">
-            <div>
-                <p class="app-kicker">Polisa z PDF</p>
-            </div>
-            <div class="ticket-pill">#<?= htmlspecialchars($ticketId, ENT_QUOTES, 'UTF-8') ?></div>
+            <p class="app-kicker">Polisa z PDF</p>
+            <h1 class="ticket-title"><?= htmlspecialchars($ticketTitle, ENT_QUOTES, 'UTF-8') ?></h1>
+            <p class="ticket-debug">Ticket #<?= htmlspecialchars($ticketId, ENT_QUOTES, 'UTF-8') ?></p>
         </header>
 
         <?php

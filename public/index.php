@@ -47,7 +47,8 @@ try {
         queryStringParam('sig'),
         queryStringParam('confirmation'),
         queryArrayParam('policy_data'),
-        queryArrayParam('policy_locked')
+        queryArrayParam('policy_locked'),
+        queryStringParam('title')
     ));
 } catch (AppException $exception) {
     sendJson(['status' => $exception->statusCode(), 'body' => [

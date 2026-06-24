@@ -10,6 +10,9 @@ use Ingreen\DaktelaPolicy\Support\AppException;
 
 final class TicketPdfAttachments
 {
+    /** @var array<string,string> */
+    private array $ticketTitles = [];
+
     public function __construct(
         private readonly DaktelaClient $daktela,
         private readonly AppLogger $logger
@@ -22,6 +25,12 @@ final class TicketPdfAttachments
     public function forTicket(string $ticketId): array
     {
         $ticket = $this->resultObject($this->daktela->getJson('/api/v6/tickets/' . rawurlencode($ticketId)));
+        $ticketTitle = $this->ticketTitle($ticket);
+
+        if ($ticketTitle !== null) {
+            $this->ticketTitles[$ticketId] = $ticketTitle;
+        }
+
         $activityAttachments = $this->ticketActivityAttachments($ticketId);
 
         if (($ticket['has_attachment'] ?? null) === false && $activityAttachments === []) {
@@ -32,6 +41,11 @@ final class TicketPdfAttachments
             $this->collectAttachments($ticket, 'ticket'),
             $activityAttachments
         )));
+    }
+
+    public function cachedTitleForTicket(string $ticketId): ?string
+    {
+        return $this->ticketTitles[$ticketId] ?? null;
     }
 
     /**
@@ -206,6 +220,20 @@ final class TicketPdfAttachments
     private function stringValue(mixed $value): ?string
     {
         return is_string($value) || is_int($value) ? (string) $value : null;
+    }
+
+    /**
+     * @param array<string, mixed> $ticket
+     */
+    private function ticketTitle(array $ticket): ?string
+    {
+        $title = $this->stringValue($ticket['title'] ?? null);
+
+        if ($title !== null && trim($title) !== '') {
+            return trim($title);
+        }
+
+        return null;
     }
 
     /**

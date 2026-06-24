@@ -46,7 +46,8 @@ final class WebhookApp
         ?string $daktelaTabSig = null,
         ?string $confirmation = null,
         ?array $policyData = null,
-        ?array $policyLocked = null
+        ?array $policyLocked = null,
+        ?string $ticketTitle = null
     ): array
     {
         $requestId = bin2hex(random_bytes(8));
@@ -70,17 +71,17 @@ final class WebhookApp
                     $validationMessage = $confirmationForm->validationMessage($confirmation);
 
                     if ($validationMessage !== null) {
-                        return $this->invalidPolicyConfirmationResponse($ticketId, $attachmentIndex, $confirmationForm, $validationMessage);
+                        return $this->invalidPolicyConfirmationResponse($ticketId, $attachmentIndex, $confirmationForm, $validationMessage, $ticketTitle);
                     }
 
-                    return $this->confirmExtractedPolicyData($ticketId, $attachmentIndex, $confirmationForm);
+                    return $this->confirmExtractedPolicyData($ticketId, $attachmentIndex, $confirmationForm, $ticketTitle);
                 }
 
                 if ($confirmation === 'no') {
                     $validationMessage = $confirmationForm->validationMessage($confirmation);
 
                     if ($validationMessage !== null) {
-                        return $this->invalidPolicyConfirmationResponse($ticketId, $attachmentIndex, $confirmationForm, $validationMessage);
+                        return $this->invalidPolicyConfirmationResponse($ticketId, $attachmentIndex, $confirmationForm, $validationMessage, $ticketTitle);
                     }
                 }
 
@@ -89,11 +90,12 @@ final class WebhookApp
                     $attachmentIndex,
                     $requestId,
                     $confirmation === 'no',
-                    $confirmationForm
+                    $confirmationForm,
+                    $ticketTitle
                 );
             }
 
-            return $this->ticketPdfListResponse($ticketId);
+            return $this->ticketPdfListResponse($ticketId, $ticketTitle);
         } catch (AppException $exception) {
             $this->logger->warning('Ticket request failed.', [
                 'requestId' => $requestId,
@@ -131,12 +133,14 @@ final class WebhookApp
     /**
      * @return array{status:int,headers:array<string,string>,body:string}
      */
-    private function ticketPdfListResponse(string $ticketId): array
+    private function ticketPdfListResponse(string $ticketId, ?string $ticketTitle): array
     {
+        $attachments = $this->ticketPdfAttachments->forTicket($ticketId);
+
         return [
             'status' => 200,
             'headers' => $this->accessGuard->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
-            'body' => $this->renderPage($ticketId, $this->ticketPdfAttachments->forTicket($ticketId)),
+            'body' => $this->renderPage($ticketId, $attachments, ticketTitle: $ticketTitle),
         ];
     }
 
@@ -148,7 +152,8 @@ final class WebhookApp
         string $attachmentIndex,
         string $requestId,
         bool $forceExtraction = false,
-        ?PolicyConfirmationForm $confirmationForm = null
+        ?PolicyConfirmationForm $confirmationForm = null,
+        ?string $ticketTitle = null
     ): array
     {
         $attachments = $this->ticketPdfAttachments->forTicket($ticketId);
@@ -172,7 +177,8 @@ final class WebhookApp
                             ],
                             $storedData,
                             $attachmentIndex,
-                            PolicyConfirmationForm::allLockedFields()
+                            PolicyConfirmationForm::allLockedFields(),
+                            $ticketTitle
                         ),
                     ];
                 }
@@ -191,7 +197,8 @@ final class WebhookApp
                                 'text' => 'Wczytano dane z poprzedniego odczytu polisy. Sprawdź wartości przed zapisaniem do systemu.',
                             ],
                             $pendingData,
-                            $attachmentIndex
+                            $attachmentIndex,
+                            ticketTitle: $ticketTitle
                         ),
                     ];
                 }
@@ -241,7 +248,8 @@ final class WebhookApp
                     ],
                     $extractedData,
                     $attachmentIndex,
-                    $confirmationForm?->lockedFields() ?? []
+                    $confirmationForm?->lockedFields() ?? [],
+                    $ticketTitle
                 ),
             ];
         } catch (AppException $exception) {
@@ -259,7 +267,7 @@ final class WebhookApp
                 'body' => $this->renderPage($ticketId, $attachments, [
                     'type' => 'error',
                     'text' => $this->policyProcessingErrorMessage($exception),
-                ]),
+                ], ticketTitle: $ticketTitle),
             ];
         } catch (Throwable $exception) {
             $this->logger->exception($exception, [
@@ -274,7 +282,7 @@ final class WebhookApp
                 'body' => $this->renderPage($ticketId, $attachments, [
                     'type' => 'error',
                     'text' => $this->policyProcessingErrorMessage($exception),
-                ]),
+                ], ticketTitle: $ticketTitle),
             ];
         }
     }
@@ -285,7 +293,8 @@ final class WebhookApp
     private function confirmExtractedPolicyData(
         string $ticketId,
         string $attachmentIndex,
-        PolicyConfirmationForm $confirmationForm
+        PolicyConfirmationForm $confirmationForm,
+        ?string $ticketTitle = null
     ): array
     {
         $attachments = $this->ticketPdfAttachments->forTicket($ticketId);
@@ -316,7 +325,8 @@ final class WebhookApp
                     ],
                     $extractedData,
                     $attachmentIndex,
-                    $confirmationForm->lockedFields()
+                    $confirmationForm->lockedFields(),
+                    $ticketTitle
                 ),
             ];
         } catch (AppException $exception) {
@@ -326,7 +336,7 @@ final class WebhookApp
                 'body' => $this->renderPage($ticketId, $attachments, [
                     'type' => 'error',
                     'text' => $this->policyProcessingErrorMessage($exception),
-                ]),
+                ], ticketTitle: $ticketTitle),
             ];
         }
     }
@@ -338,7 +348,8 @@ final class WebhookApp
         string $ticketId,
         string $attachmentIndex,
         PolicyConfirmationForm $confirmationForm,
-        string $message
+        string $message,
+        ?string $ticketTitle = null
     ): array
     {
         $attachments = $this->ticketPdfAttachments->forTicket($ticketId);
@@ -356,7 +367,8 @@ final class WebhookApp
                 ],
                 $extractedData,
                 $attachmentIndex,
-                $confirmationForm->lockedFields()
+                $confirmationForm->lockedFields(),
+                $ticketTitle
             ),
         ];
     }
@@ -467,13 +479,24 @@ final class WebhookApp
         ?array $message = null,
         ?ExtractedPolicyData $extractedData = null,
         ?string $selectedAttachmentIndex = null,
-        array $selectedLockedFields = []
+        array $selectedLockedFields = [],
+        ?string $ticketTitle = null
     ): string
     {
         $accessToken = $this->accessGuard->accessTokenForTicket($ticketId);
+        $ticketTitle = $this->displayTicketTitle($ticketId, $ticketTitle);
         ob_start();
         require dirname(__DIR__) . '/templates/page.php';
         return (string) ob_get_clean();
+    }
+
+    private function displayTicketTitle(string $ticketId, ?string $ticketTitle): string
+    {
+        if ($ticketTitle !== null && trim($ticketTitle) !== '') {
+            return trim($ticketTitle);
+        }
+
+        return $this->ticketPdfAttachments->cachedTitleForTicket($ticketId) ?? 'Ticket bez tytułu';
     }
 
     private function requiredTicketId(?string $ticketId): string
