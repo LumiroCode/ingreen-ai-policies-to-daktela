@@ -23,7 +23,7 @@ final class WebhookApp
         private readonly PolicyDataExtractor $policyDataExtractor,
         private readonly AppLogger $logger
     ) {
-        $this->accessGuard = new WebhookAccessGuard($config);
+        $this->accessGuard = new WebhookAccessGuard($config, $logger);
     }
 
     /**
@@ -73,7 +73,6 @@ final class WebhookApp
                     'error' => [
                         'code' => $exception->errorCode(),
                         'message' => $exception->getMessage(),
-                        'details' => $exception->details(),
                     ],
                 ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
             ];
