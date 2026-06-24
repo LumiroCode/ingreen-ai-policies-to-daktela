@@ -41,8 +41,10 @@ try {
         queryStringParam('ticket'),
         queryStringParam('attachment'),
         queryStringParam('access_token'),
-        queryStringParam('utility_key'),
-        $_SERVER['HTTP_REFERER'] ?? null
+        $_SERVER['HTTP_REFERER'] ?? null,
+        requestHeaders(),
+        queryStringParam('dt'),
+        queryStringParam('sig')
     ));
 } catch (AppException $exception) {
     sendJson(['status' => $exception->statusCode(), 'body' => [
@@ -67,6 +69,29 @@ function queryStringParam(string $name): ?string
     $value = $_GET[$name] ?? null;
 
     return is_string($value) ? $value : null;
+}
+
+/**
+ * @return array<string,string>
+ */
+function requestHeaders(): array
+{
+    $headers = [];
+
+    foreach ([
+        'Referer' => 'HTTP_REFERER',
+        'Sec-Fetch-Dest' => 'HTTP_SEC_FETCH_DEST',
+        'Sec-Fetch-Mode' => 'HTTP_SEC_FETCH_MODE',
+        'Sec-Fetch-Site' => 'HTTP_SEC_FETCH_SITE',
+    ] as $name => $serverKey) {
+        $value = $_SERVER[$serverKey] ?? null;
+
+        if (is_string($value)) {
+            $headers[$name] = $value;
+        }
+    }
+
+    return $headers;
 }
 
 /**
