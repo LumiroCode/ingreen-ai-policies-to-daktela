@@ -36,8 +36,8 @@ Poniższe tylko dla samochodów marki Tesla
 - data_konca_polisy: data końca polisy
 - cena_pakietu: Cena Pakietu pierwszy rok
 - data_sprzedazy_lubezpieczenia: Data sprzedaży ubezpieczenia pierwszy rok
-- cena_suma_skladek_online: ?
-- cena_suma_skladek_online_promo: ?
+- cena_suma_skladek_online: NIE Z POLISY - POMIJAMY
+- cena_suma_skladek_online_promo: NIE Z POLISY - POMIJAMY
 
 ### ~~Ubezpieczenia dodatkowe~~
 #OUT-OF-SCOPE
