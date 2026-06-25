@@ -52,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const feedback = form.querySelector('.policy-review-feedback');
         const locks = Array.from(form.querySelectorAll('.policy-review-lock'));
         const lockAll = form.querySelector('.policy-review-lock-all');
+        const groupLocks = Array.from(form.querySelectorAll('.policy-review-lock-group'));
         const saveButton = form.querySelector('button[name="confirmation"][value="yes"]');
         const retryButton = form.querySelector('button[name="confirmation"][value="no"]');
 
@@ -76,6 +77,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 lockAll.checked = allLocked;
                 lockAll.indeterminate = someLocked && !allLocked;
             }
+
+            groupLocks.forEach((groupLock) => {
+                const group = groupLock.closest('.policy-field-group');
+                const groupFieldLocks = group === null
+                    ? []
+                    : Array.from(group.querySelectorAll('.policy-review-lock'));
+                const allGroupLocked = groupFieldLocks.length > 0 && groupFieldLocks.every((checkbox) => checkbox.checked);
+                const someGroupLocked = groupFieldLocks.some((checkbox) => checkbox.checked);
+
+                groupLock.checked = allGroupLocked;
+                groupLock.indeterminate = someGroupLocked && !allGroupLocked;
+            });
 
             if (saveButton !== null) {
                 saveButton.disabled = !allLocked;
@@ -111,6 +124,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 sync();
             });
         }
+
+        groupLocks.forEach((groupLock) => {
+            groupLock.addEventListener('change', () => {
+                if (feedback !== null) {
+                    feedback.hidden = true;
+                    feedback.textContent = '';
+                }
+
+                const group = groupLock.closest('.policy-field-group');
+                const groupFieldLocks = group === null
+                    ? []
+                    : Array.from(group.querySelectorAll('.policy-review-lock'));
+
+                groupFieldLocks.forEach((checkbox) => {
+                    checkbox.checked = groupLock.checked;
+                });
+
+                sync();
+            });
+        });
 
         form.addEventListener('submit', (event) => {
             const allLocked = locks.length > 0 && locks.every((checkbox) => checkbox.checked);

@@ -16,12 +16,17 @@ final class PolicyDataResponseParser
             throw new AppException(502, 'policy_extraction_parse_failed', 'Claude did not return valid policy extraction JSON.');
         }
 
-        return new ExtractedPolicyData(
-            $this->nullableString($payload['car_make'] ?? null),
-            $this->nullableString($payload['car_model'] ?? null),
-            $this->nullableString($payload['value'] ?? null),
-            $response
-        );
+        $fields = [];
+
+        foreach (ExtractedPolicyData::FIELDS as $field) {
+            $fields[$field] = $this->nullableString($payload[$field] ?? null);
+        }
+
+        $fields['marka'] ??= $this->nullableString($payload['car_make'] ?? null);
+        $fields['model'] ??= $this->nullableString($payload['car_model'] ?? null);
+        $fields['wartosc_pojazdu_brutto'] ??= $this->nullableString($payload['value'] ?? null);
+
+        return ExtractedPolicyData::fromFields($fields, $response);
     }
 
     private function jsonObject(string $response): string

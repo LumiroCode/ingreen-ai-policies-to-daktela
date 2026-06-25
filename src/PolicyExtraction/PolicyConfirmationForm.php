@@ -6,8 +6,6 @@ namespace Ingreen\DaktelaPolicy\PolicyExtraction;
 
 final class PolicyConfirmationForm
 {
-    private const FIELDS = ['car_make', 'car_model', 'value'];
-
     /**
      * @param array<string,string> $values
      * @param array<string,bool> $lockedFields
@@ -27,13 +25,13 @@ final class PolicyConfirmationForm
     {
         $values = [];
 
-        foreach (self::FIELDS as $field) {
+        foreach (ExtractedPolicyData::FIELDS as $field) {
             $values[$field] = self::nullableValue($policyData[$field] ?? null);
         }
 
         $lockedFields = [];
 
-        foreach (self::FIELDS as $field) {
+        foreach (ExtractedPolicyData::FIELDS as $field) {
             if (is_array($policyLocked) && array_key_exists($field, $policyLocked)) {
                 $lockedFields[$field] = true;
             }
@@ -47,7 +45,7 @@ final class PolicyConfirmationForm
      */
     public static function allLockedFields(): array
     {
-        return array_fill_keys(self::FIELDS, true);
+        return array_fill_keys(ExtractedPolicyData::FIELDS, true);
     }
 
     /**
@@ -60,7 +58,7 @@ final class PolicyConfirmationForm
 
     public function validationMessage(?string $confirmation): ?string
     {
-        $allLocked = count($this->lockedFields) === count(self::FIELDS);
+        $allLocked = count($this->lockedFields) === count(ExtractedPolicyData::FIELDS);
 
         if ($confirmation === 'yes' && !$allLocked) {
             return 'Aby potwierdzić poprawność danych, zaznacz wszystkie pola jako poprawne.';
@@ -88,13 +86,9 @@ final class PolicyConfirmationForm
             return $extractedData;
         }
 
-        $values = [
-            'car_make' => $extractedData->carMake,
-            'car_model' => $extractedData->carModel,
-            'value' => $extractedData->value,
-        ];
+        $values = $extractedData->fields;
 
-        foreach (self::FIELDS as $field) {
+        foreach (ExtractedPolicyData::FIELDS as $field) {
             if (isset($this->lockedFields[$field])) {
                 $values[$field] = $this->values[$field];
             }
@@ -108,16 +102,14 @@ final class PolicyConfirmationForm
      */
     private function policyDataFromValues(array $values): ExtractedPolicyData
     {
-        $payload = [
-            'car_make' => $values['car_make'] ?? null,
-            'car_model' => $values['car_model'] ?? null,
-            'value' => $values['value'] ?? null,
-        ];
+        $payload = [];
 
-        return new ExtractedPolicyData(
-            $payload['car_make'],
-            $payload['car_model'],
-            $payload['value'],
+        foreach (ExtractedPolicyData::FIELDS as $field) {
+            $payload[$field] = $values[$field] ?? null;
+        }
+
+        return ExtractedPolicyData::fromFields(
+            $payload,
             json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)
         );
     }

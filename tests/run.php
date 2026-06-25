@@ -66,16 +66,16 @@ final class NullLogger extends AppLogger
 
 final class FakeClaudeMessagesClient implements ClaudeMessagesClient
 {
-    /** @var list<array{model:string,maxTokens:int,messages:list<array{role:string,content:list<object>}>>> */
+    /** @var list<array{model:string,maxTokens:int,messages:list<array{role:string,content:list<object>}>,thinking:array<string,mixed>|null}> */
     public array $requests = [];
 
     public function __construct(private readonly string $response)
     {
     }
 
-    public function createMessage(string $model, int $maxTokens, array $messages): string
+    public function createMessage(string $model, int $maxTokens, array $messages, ?array $thinking = null): string
     {
-        $this->requests[] = ['model' => $model, 'maxTokens' => $maxTokens, 'messages' => $messages];
+        $this->requests[] = ['model' => $model, 'maxTokens' => $maxTokens, 'messages' => $messages, 'thinking' => $thinking];
 
         return $this->response;
     }
@@ -851,19 +851,21 @@ test('configured utility origin allows signed in-app attachment request', functi
     assertSameValue(200, $download['status']);
     assertSameValue('text/html; charset=UTF-8', $download['headers']['Content-Type']);
     assertTrueValue(str_contains($download['body'], 'Dane polisy'));
+    assertTrueValue(str_contains($download['body'], 'Dane pojazdu'));
     assertTrueValue(str_contains($download['body'], 'scan.pdf'));
     assertTrueValue(str_contains($download['body'], 'Marka'));
     assertTrueValue(str_contains($download['body'], 'Model'));
     assertTrueValue(str_contains($download['body'], 'Wartość'));
-    assertTrueValue(str_contains($download['body'], 'name="policy_data[car_make]"'));
-    assertTrueValue(str_contains($download['body'], 'name="policy_data[car_model]"'));
-    assertTrueValue(str_contains($download['body'], 'name="policy_data[value]"'));
+    assertTrueValue(str_contains($download['body'], 'name="policy_data[marka]"'));
+    assertTrueValue(str_contains($download['body'], 'name="policy_data[model]"'));
+    assertTrueValue(str_contains($download['body'], 'name="policy_data[wartosc_pojazdu_brutto]"'));
     assertTrueValue(str_contains($download['body'], 'value="Skoda"'));
     assertTrueValue(str_contains($download['body'], 'value="Octavia"'));
     assertTrueValue(str_contains($download['body'], 'value="50 000 CZK"'));
     assertTrueValue(str_contains($download['body'], 'class="policy-review-lock-all"'));
+    assertTrueValue(str_contains($download['body'], 'class="policy-review-lock-group"'));
     assertTrueValue(str_contains($download['body'], 'wszystkie poprawne?'));
-    assertTrueValue(str_contains($download['body'], 'name="policy_locked[car_make]"'));
+    assertTrueValue(str_contains($download['body'], 'name="policy_locked[marka]"'));
     assertTrueValue(str_contains($download['body'], 'name="confirmation"'));
     assertTrueValue(str_contains($download['body'], 'value="yes"'));
     assertTrueValue(str_contains($download['body'], 'value="no"'));
@@ -898,14 +900,27 @@ test('confirmed policy data loaded from cache is locked by default', function ()
         daktelaAccessToken('123'),
         confirmation: 'yes',
         policyData: [
-            'car_make' => 'Skoda',
-            'car_model' => 'Octavia',
-            'value' => '50 000 CZK',
+            'marka' => 'Skoda',
+            'model' => 'Octavia',
+            'wartosc_pojazdu_brutto' => '50 000 CZK',
         ],
         policyLocked: [
-            'car_make' => '1',
-            'car_model' => '1',
-            'value' => '1',
+            'stan_pojazdu' => '1',
+            'marka' => '1',
+            'model' => '1',
+            'wersja' => '1',
+            'vin' => '1',
+            'rocznik' => '1',
+            'przebieg' => '1',
+            'wartosc_pojazdu_brutto' => '1',
+            'wartosc_pojazdu_netto' => '1',
+            'kategoria_pojazdu' => '1',
+            'sposob_korzystania' => '1',
+            'typ_silnika' => '1',
+            'pojemnosc_silnika' => '1',
+            'data_nabycia' => '1',
+            'data_pierwszej_rejestracji' => '1',
+            'planowana_data_rejestracji' => '1',
         ]
     );
     $cached = $app->handle('123', '0', daktelaAccessToken('123'));
@@ -918,9 +933,9 @@ test('confirmed policy data loaded from cache is locked by default', function ()
         str_contains($cached['body'], 'Polisa została już kiedyś odczytana - wczytano zapisane dane.'),
         'Expected policy data to be loaded from cache.'
     );
-    assertPolicyFieldLocked($cached['body'], 'car_make');
-    assertPolicyFieldLocked($cached['body'], 'car_model');
-    assertPolicyFieldLocked($cached['body'], 'value');
+    assertPolicyFieldLocked($cached['body'], 'marka');
+    assertPolicyFieldLocked($cached['body'], 'model');
+    assertPolicyFieldLocked($cached['body'], 'wartosc_pojazdu_brutto');
     assertTrueValue(
         preg_match('/class="policy-review-lock-all"[^>]*\bchecked\b/s', $cached['body']) === 1,
         'Expected master policy lock checkbox to be checked for cached locked policy data.'
@@ -1000,12 +1015,12 @@ test('policy reread after incorrectness claim ignores pending cache', function (
         daktelaAccessToken('123'),
         confirmation: 'no',
         policyData: [
-            'car_make' => 'Skoda',
-            'car_model' => 'Octavia',
-            'value' => '50 000 CZK',
+            'marka' => 'Skoda',
+            'model' => 'Octavia',
+            'wartosc_pojazdu_brutto' => '50 000 CZK',
         ],
         policyLocked: [
-            'car_make' => '1',
+            'marka' => '1',
         ]
     );
 
@@ -1129,9 +1144,9 @@ test('selected PDF attachment is stored only after clicking read', function (): 
 
     assertSameValue(200, $download['status']);
     assertSameValue('text/html; charset=UTF-8', $download['headers']['Content-Type']);
-    assertTrueValue(str_contains($download['body'], 'name="policy_data[car_make]"'));
-    assertTrueValue(str_contains($download['body'], 'name="policy_data[car_model]"'));
-    assertTrueValue(str_contains($download['body'], 'name="policy_data[value]"'));
+    assertTrueValue(str_contains($download['body'], 'name="policy_data[marka]"'));
+    assertTrueValue(str_contains($download['body'], 'name="policy_data[model]"'));
+    assertTrueValue(str_contains($download['body'], 'name="policy_data[wartosc_pojazdu_brutto]"'));
     assertTrueValue(str_contains($download['body'], 'value="Skoda"'));
     assertTrueValue(str_contains($download['body'], 'value="Octavia"'));
     assertTrueValue(str_contains($download['body'], 'value="50 000 CZK"'));
@@ -1335,12 +1350,15 @@ test('app logger writes JSON lines to configured log file', function (): void {
 
 test('policy data parser maps Claude JSON response to extracted policy data', function (): void {
     $data = (new PolicyDataResponseParser())->parse('```json
-{"car_make":"Toyota","car_model":"Corolla","value":"123 000 PLN"}
+{"stan_pojazdu":"Używany","marka":"Toyota","model":"Corolla","wersja":"Comfort","vin":"JT123","rocznik":"2022","przebieg":"12000","wartosc_pojazdu_brutto":"123 000 PLN","wartosc_pojazdu_netto":null,"kategoria_pojazdu":"Osobowy (Kat. M1)","sposob_korzystania":"Standardowy","typ_silnika":"Hybryda","pojemnosc_silnika":"1798","data_nabycia":"2024-01-01","data_pierwszej_rejestracji":"2022-03-01","planowana_data_rejestracji":null}
 ```');
 
     assertSameValue('Toyota', $data->carMake);
     assertSameValue('Corolla', $data->carModel);
     assertSameValue('123 000 PLN', $data->value);
+    assertSameValue('Używany', $data->field('stan_pojazdu'));
+    assertSameValue('JT123', $data->field('vin'));
+    assertSameValue('Hybryda', $data->field('typ_silnika'));
 });
 
 test('Claude policy extractor sends PDF document and prompt to Claude client', function (): void {
@@ -1361,7 +1379,9 @@ test('Claude policy extractor sends PDF document and prompt to Claude client', f
     assertSameValue('user', $client->requests[0]['messages'][0]['role']);
     assertTrueValue($client->requests[0]['messages'][0]['content'][0] instanceof DocumentBlockParam);
     assertTrueValue($client->requests[0]['messages'][0]['content'][1] instanceof TextBlockParam);
-    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'car make'));
+    assertSameValue(['type' => 'adaptive'], $client->requests[0]['thinking']);
+    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'stan_pojazdu'));
+    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'Nie wymyślaj danych'));
 });
 
 echo "\nAll tests passed.\n";

@@ -13,12 +13,21 @@ declare(strict_types=1);
  */
 
 $policyRows = [];
+$policyGroups = [];
 
 if ($extractedData instanceof \Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData) {
-    $policyRows = [
-        'car_make' => ['label' => 'Marka', 'value' => $extractedData->carMake],
-        'car_model' => ['label' => 'Model', 'value' => $extractedData->carModel],
-        'value' => ['label' => 'Wartość', 'value' => $extractedData->value],
+    foreach (\Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData::FIELDS as $field) {
+        $policyRows[$field] = [
+            'label' => \Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData::LABELS[$field],
+            'value' => $extractedData->field($field),
+        ];
+    }
+
+    $policyGroups = [
+        [
+            'label' => 'Dane pojazdu',
+            'rows' => $policyRows,
+        ],
     ];
 }
 
@@ -68,38 +77,62 @@ $selectedAttachmentTitle = is_array($selectedAttachment)
                 <span>wszystkie poprawne?</span>
             </label>
 
-            <?php foreach ($policyRows as $key => $row): ?>
-                <?php
-                    $locked = $selectedLockedFields[$key] ?? false;
-                    $fieldId = 'policy-data-' . $key;
-                    $lockId = 'policy-lock-' . $key;
-                ?>
-                <div class="policy-field<?= $locked ? ' locked' : '' ?>">
-                    <div class="field-topline">
-                        <label for="<?= htmlspecialchars($fieldId, ENT_QUOTES, 'UTF-8') ?>">
-                            <?= htmlspecialchars($row['label'], ENT_QUOTES, 'UTF-8') ?>
-                        </label>
-                        <label class="lock-control" for="<?= htmlspecialchars($lockId, ENT_QUOTES, 'UTF-8') ?>">
+            <?php foreach ($policyGroups as $groupIndex => $group): ?>
+                <fieldset class="policy-field-group">
+                    <?php
+                        $groupRows = is_array($group['rows']) ? $group['rows'] : [];
+                        $groupLocked = $groupRows !== [] && count(array_intersect_key($selectedLockedFields, $groupRows)) === count($groupRows);
+                        $groupLockId = 'policy-lock-group-' . $groupIndex;
+                    ?>
+                    <legend>
+                        <span><?= htmlspecialchars($group['label'], ENT_QUOTES, 'UTF-8') ?></span>
+                        <label class="lock-control lock-control-group" for="<?= htmlspecialchars($groupLockId, ENT_QUOTES, 'UTF-8') ?>">
                             <input
-                                id="<?= htmlspecialchars($lockId, ENT_QUOTES, 'UTF-8') ?>"
-                                class="policy-review-lock"
+                                id="<?= htmlspecialchars($groupLockId, ENT_QUOTES, 'UTF-8') ?>"
+                                class="policy-review-lock-group"
                                 type="checkbox"
-                                name="policy_locked[<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>]"
-                                value="1"
-                                <?= $locked ? 'checked' : '' ?>
+                                <?= $groupLocked ? 'checked' : '' ?>
                             >
                             <span>poprawne?</span>
                         </label>
+                    </legend>
+
+                    <div class="policy-field-group-fields">
+                        <?php foreach ($groupRows as $key => $row): ?>
+                            <?php
+                                $locked = $selectedLockedFields[$key] ?? false;
+                                $fieldId = 'policy-data-' . $key;
+                                $lockId = 'policy-lock-' . $key;
+                            ?>
+                            <div class="policy-field<?= $locked ? ' locked' : '' ?>">
+                                <div class="field-topline">
+                                    <label for="<?= htmlspecialchars($fieldId, ENT_QUOTES, 'UTF-8') ?>">
+                                        <?= htmlspecialchars($row['label'], ENT_QUOTES, 'UTF-8') ?>
+                                    </label>
+                                    <label class="lock-control" for="<?= htmlspecialchars($lockId, ENT_QUOTES, 'UTF-8') ?>">
+                                        <input
+                                            id="<?= htmlspecialchars($lockId, ENT_QUOTES, 'UTF-8') ?>"
+                                            class="policy-review-lock"
+                                            type="checkbox"
+                                            name="policy_locked[<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>]"
+                                            value="1"
+                                            <?= $locked ? 'checked' : '' ?>
+                                        >
+                                        <span>poprawne?</span>
+                                    </label>
+                                </div>
+                                <input
+                                    id="<?= htmlspecialchars($fieldId, ENT_QUOTES, 'UTF-8') ?>"
+                                    class="policy-input"
+                                    type="text"
+                                    name="policy_data[<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>]"
+                                    value="<?= htmlspecialchars((string) ($row['value'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                    <?= $locked ? 'readonly' : '' ?>
+                                >
+                            </div>
+                        <?php endforeach; ?>
                     </div>
-                    <input
-                        id="<?= htmlspecialchars($fieldId, ENT_QUOTES, 'UTF-8') ?>"
-                        class="policy-input"
-                        type="text"
-                        name="policy_data[<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>]"
-                        value="<?= htmlspecialchars((string) ($row['value'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                        <?= $locked ? 'readonly' : '' ?>
-                    >
-                </div>
+                </fieldset>
             <?php endforeach; ?>
         </div>
 

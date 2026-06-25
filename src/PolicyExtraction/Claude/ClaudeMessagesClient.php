@@ -8,6 +8,7 @@ interface ClaudeMessagesClient
 {
     /**
      * @param list<array{role:string,content:list<object>}> $messages
+     * @param array<string,mixed>|null $thinking
      */
-    public function createMessage(string $model, int $maxTokens, array $messages): string;
+    public function createMessage(string $model, int $maxTokens, array $messages, ?array $thinking = null): string;
 }

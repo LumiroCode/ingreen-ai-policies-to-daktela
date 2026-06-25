@@ -68,10 +68,18 @@ final class PolicyDataCache
             return null;
         }
 
-        return new ExtractedPolicyData(
-            isset($payload['car_make']) && is_string($payload['car_make']) ? $payload['car_make'] : null,
-            isset($payload['car_model']) && is_string($payload['car_model']) ? $payload['car_model'] : null,
-            isset($payload['value']) && is_string($payload['value']) ? $payload['value'] : null,
+        $fields = [];
+
+        foreach (ExtractedPolicyData::FIELDS as $field) {
+            $fields[$field] = isset($payload[$field]) && is_string($payload[$field]) ? $payload[$field] : null;
+        }
+
+        $fields['marka'] ??= isset($payload['car_make']) && is_string($payload['car_make']) ? $payload['car_make'] : null;
+        $fields['model'] ??= isset($payload['car_model']) && is_string($payload['car_model']) ? $payload['car_model'] : null;
+        $fields['wartosc_pojazdu_brutto'] ??= isset($payload['value']) && is_string($payload['value']) ? $payload['value'] : null;
+
+        return ExtractedPolicyData::fromFields(
+            $fields,
             isset($payload['raw_response']) && is_string($payload['raw_response']) ? $payload['raw_response'] : ''
         );
     }
@@ -86,12 +94,10 @@ final class PolicyDataCache
             ]);
         }
 
-        $payload = json_encode([
-            'car_make' => $data->carMake,
-            'car_model' => $data->carModel,
-            'value' => $data->value,
-            'raw_response' => $data->rawResponse,
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        $payload = json_encode(
+            array_merge($data->fields, ['raw_response' => $data->rawResponse]),
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
+        );
 
         if (file_put_contents($path, $payload, LOCK_EX) === false) {
             throw new AppException(500, 'policy_data_storage_failed', 'Could not write policy data file.', [
