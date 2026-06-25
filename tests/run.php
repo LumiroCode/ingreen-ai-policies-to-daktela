@@ -878,7 +878,7 @@ test('configured utility origin allows signed in-app attachment request', functi
     assertTrueValue(str_contains($download['body'], 'value="50 000 CZK"'));
     assertTrueValue(str_contains($download['body'], 'class="policy-review-lock-all"'));
     assertTrueValue(str_contains($download['body'], 'class="policy-review-lock-group"'));
-    assertTrueValue(str_contains($download['body'], 'wszystkie poprawne?'));
+    assertTrueValue(str_contains($download['body'], 'zachowaj wszystkie'));
     assertTrueValue(str_contains($download['body'], 'name="policy_locked[marka]"'));
     assertTrueValue(str_contains($download['body'], 'name="confirmation"'));
     assertTrueValue(str_contains($download['body'], 'value="yes"'));

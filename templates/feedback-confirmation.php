@@ -87,7 +87,7 @@ $selectedAttachmentTitle = is_array($selectedAttachment)
                     type="checkbox"
                     <?= $allLocked ? 'checked' : '' ?>
                 >
-                <span>wszystkie poprawne?</span>
+                <span>zachowaj wszystkie</span>
             </label>
 
             <?php foreach ($policyGroups as $groupIndex => $group): ?>
@@ -106,7 +106,7 @@ $selectedAttachmentTitle = is_array($selectedAttachment)
                                 type="checkbox"
                                 <?= $groupLocked ? 'checked' : '' ?>
                             >
-                            <span>poprawne?</span>
+                            <span>zachowaj grupę</span>
                         </label>
                     </legend>
 
@@ -131,7 +131,7 @@ $selectedAttachmentTitle = is_array($selectedAttachment)
                                             value="1"
                                             <?= $locked ? 'checked' : '' ?>
                                         >
-                                        <span>poprawne?</span>
+                                        <span>zachowaj</span>
                                     </label>
                                 </div>
                                 <input
@@ -158,7 +158,7 @@ $selectedAttachmentTitle = is_array($selectedAttachment)
                 name="confirmation"
                 value="yes"
                 <?= $allLocked ? '' : 'disabled' ?>
-                title="<?= $allLocked ? '' : 'Zaznacz wszystkie pola jako poprawne, aby móc zapisać dane polisy.' ?>"
+                title="<?= $allLocked ? '' : 'Oznacz wszystkie pola jako do zachowania, aby móc zapisać dane polisy.' ?>"
             >Zapisz</button>
             <button
                 class="button secondary"
