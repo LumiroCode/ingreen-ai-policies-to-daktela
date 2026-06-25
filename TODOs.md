@@ -1,0 +1,3 @@
+- usunąć nonsensowne pola z wyszukiwania przez AI (np. kategoria TU: partner InGereen / Asap / Wiktoria, cena_suma_skladek_online, cena_suma_skladek_online_promo, ubezpieczenia dodatkowe, GAP)
+- zmienić kontrolki formularza z tekstowych na select tam gdzie wartości są wybierane z enuma
+- zapisać dane wyciągnięte przez AI do ticketa i rekordów CRM w Daktela, w tym załączniki (PDF z polisą)

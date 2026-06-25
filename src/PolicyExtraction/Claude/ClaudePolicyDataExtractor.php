@@ -25,10 +25,12 @@ Nie wymyślaj danych. Każde pole może mieć wartość null, jeśli nie da się
 Zwróć wyłącznie poprawny JSON z dokładnie tymi kluczami:
 {
   "stan_pojazdu": "Nowy" | "Używany" | "Nieznany" | null,
+  "nr_rejestracyjny": string | null,
   "marka": string | null,
   "model": string | null,
   "wersja": string | null,
   "vin": string | null,
+  "forma_wlasnosci": "Własny" | "Leasing" | "Bank" | "Wynajem" | null,
   "rocznik": string | null,
   "przebieg": string | null,
   "wartosc_pojazdu_brutto": string | null,
@@ -40,25 +42,48 @@ Zwróć wyłącznie poprawny JSON z dokładnie tymi kluczami:
   "data_nabycia": string | null,
   "data_pierwszej_rejestracji": string | null,
   "planowana_data_rejestracji": string | null,
+  "wspolposiadacz": "tak" | "nie" | null,
+  "imie_wspolposiadacza": string | null,
+  "nazwisko_wspolposiadacza": string | null,
+  "pesel_wspolposiadacza": string | null,
+  "adres_wspolposiadacza": string | null,
   "pakiet_ubezpieczeniowy": "tak" | "nie" | null,
   "rodzaj_assistance": "minimalny" | "Polska" | "Europa (500-700km)" | "Europa (1000km)" | "Europa (+1500km)" | null,
   "towarzystwo_ubezpieczeniowe": "Alianz" | "Aviva" | "AXA" | "Balcia" | "Benefia" | "Compensa" | "Concordia" | "Defend" | "Ergo Hestia" | "Ergo Hestia - Pakiet Dealerski" | "Ergo Hestia - Pakiet Dealerski polisa za 1zł" | "Euroins" | "Generali" | "Gothaer" | "HDI" | "Inne" | "Interrisk" | "Liberty Ubezpieczenia" | "Link4" | "Met Life" | "MTU" | "NN Życie" | "Open Life" | "PKO Ubezpieczenia" | "Polisa - Życie" | "Polskie Towarzystwo Reasekuracji" | "Proama" | "PTU" | "PZM" | "PZU" | "PZU - pakiet dealerski SIGMA" | "RESO Europa" | "Saltus" | "Signal Iduna" | "TU Europa" | "TUW" | "TUZ" | "Uniqa" | "Vienna Life" | "Warta" | "Wefox" | "Wiener" | null,
+  "nr_polisy": string | null,
   "kategoria_tu": "Partner InGreen" | "Asap" | "Wiktoria" | null,
   "data_konca_polisy": string | null,
   "cena_pakietu": string | null,
-  "data_sprzedazy_lubezpieczenia": string | null
+  "cena_wznowienia": string | null,
+  "pc_cena": string | null,
+  "ac_cena": string | null,
+  "cena_nnw": string | null,
+  "cena_assistance": string | null,
+  "gap_cena": string | null,
+  "cena_przedluzonej_gwarancji": string | null,
+  "pochodzenie_polisy": string | null,
+  "rodzaj_polisy": "OC" | "OC/AC" | "OC/AC/NNW" | "OC/AC/NNW/Assistance" | "AC" | "NNW" | "Assistance" | "GAP" | "Przedłużona Gwarancja" | null,
+  "data_sprzedazy_lubezpieczenia": string | null,
+  "data_sprzedazy_wznowienia": string | null
 }
 
 Reguły normalizacji:
 - rocznik zwróć jako rok produkcji pojazdu.
 - przebieg zwróć w kilometrach.
 - wartosc_pojazdu_brutto i wartosc_pojazdu_netto zwróć w PLN, jeśli są dostępne.
+- forma_wlasnosci zwróć tylko wtedy, gdy polisa jednoznacznie wskazuje jedną z wartości: "Własny", "Leasing", "Bank", "Wynajem".
 - pojemnosc_silnika zwróć w cm3.
 - data_pierwszej_rejestracji dotyczy tylko pojazdów używanych; dla pojazdów nowych zwróć null, chyba że polisa jednoznacznie podaje tę datę.
 - planowana_data_rejestracji dotyczy tylko pojazdów nowych; dla pojazdów używanych zwróć null.
+- wspolposiadacz zwróć jako "tak", jeśli polisa wskazuje więcej niż jednego właściciela, współwłaściciela lub współposiadacza pojazdu; zwróć "nie", jeśli polisa jednoznacznie wskazuje tylko jednego właściciela/posiadacza. Jeśli wspolposiadacz to "tak", uzupełnij dane współposiadacza na podstawie polisy.
 - pakiet_ubezpieczeniowy zwróć jako "tak", jeśli dokument dotyczy całego pakietu ubezpieczeniowego; zwróć "nie", jeśli dotyczy tylko pojedynczego produktu AC, NNW, Assistance, GAP albo Przedłużona Gwarancja.
 - rodzaj_assistance zwróć tylko wtedy, gdy zakres assistance da się jednoznacznie dopasować do jednej z podanych wartości.
-- cena_pakietu dotyczy ceny pakietu za pierwszy rok; zwróć walutę, jeśli jest dostępna.
+- nr_polisy zwróć jako numer polisy.
+- ceny zwróć z walutą, jeśli jest dostępna.
+- cena_pakietu dotyczy ceny pakietu za pierwszy rok.
+- cena_wznowienia, pc_cena, ac_cena, cena_nnw, cena_assistance, gap_cena i cena_przedluzonej_gwarancji zwróć tylko wtedy, gdy dokument jednoznacznie wskazuje odpowiednią składkę/cenę.
+- rodzaj_polisy zwróć tylko wtedy, gdy zakres polisy da się jednoznacznie dopasować do jednej z podanych wartości.
+- data_sprzedazy_lubezpieczenia dotyczy sprzedaży ubezpieczenia za pierwszy rok, a data_sprzedazy_wznowienia sprzedaży wznowienia.
 - Jeśli dokument podaje "/", "-", "brak", puste pole albo wartość niejednoznaczną, zwróć null.
 PROMPT;
 
@@ -71,10 +96,17 @@ PROMPT;
                     ['type' => 'null'],
                 ],
             ],
+            'nr_rejestracyjny' => ['type' => ['string', 'null']],
             'marka' => ['type' => ['string', 'null']],
             'model' => ['type' => ['string', 'null']],
             'wersja' => ['type' => ['string', 'null']],
             'vin' => ['type' => ['string', 'null']],
+            'forma_wlasnosci' => [
+                'anyOf' => [
+                    ['type' => 'string', 'enum' => ['Własny', 'Leasing', 'Bank', 'Wynajem']],
+                    ['type' => 'null'],
+                ],
+            ],
             'rocznik' => ['type' => ['string', 'null']],
             'przebieg' => ['type' => ['string', 'null']],
             'wartosc_pojazdu_brutto' => ['type' => ['string', 'null']],
@@ -108,6 +140,16 @@ PROMPT;
             'data_nabycia' => ['type' => ['string', 'null']],
             'data_pierwszej_rejestracji' => ['type' => ['string', 'null']],
             'planowana_data_rejestracji' => ['type' => ['string', 'null']],
+            'wspolposiadacz' => [
+                'anyOf' => [
+                    ['type' => 'string', 'enum' => ['tak', 'nie']],
+                    ['type' => 'null'],
+                ],
+            ],
+            'imie_wspolposiadacza' => ['type' => ['string', 'null']],
+            'nazwisko_wspolposiadacza' => ['type' => ['string', 'null']],
+            'pesel_wspolposiadacza' => ['type' => ['string', 'null']],
+            'adres_wspolposiadacza' => ['type' => ['string', 'null']],
             'pakiet_ubezpieczeniowy' => [
                 'anyOf' => [
                     ['type' => 'string', 'enum' => ['tak', 'nie']],
@@ -181,6 +223,7 @@ PROMPT;
                     ['type' => 'null'],
                 ],
             ],
+            'nr_polisy' => ['type' => ['string', 'null']],
             'kategoria_tu' => [
                 'anyOf' => [
                     ['type' => 'string', 'enum' => ['Partner InGreen', 'Asap', 'Wiktoria']],
@@ -189,14 +232,44 @@ PROMPT;
             ],
             'data_konca_polisy' => ['type' => ['string', 'null']],
             'cena_pakietu' => ['type' => ['string', 'null']],
+            'cena_wznowienia' => ['type' => ['string', 'null']],
+            'pc_cena' => ['type' => ['string', 'null']],
+            'ac_cena' => ['type' => ['string', 'null']],
+            'cena_nnw' => ['type' => ['string', 'null']],
+            'cena_assistance' => ['type' => ['string', 'null']],
+            'gap_cena' => ['type' => ['string', 'null']],
+            'cena_przedluzonej_gwarancji' => ['type' => ['string', 'null']],
+            'pochodzenie_polisy' => ['type' => ['string', 'null']],
+            'rodzaj_polisy' => [
+                'anyOf' => [
+                    [
+                        'type' => 'string',
+                        'enum' => [
+                            'OC',
+                            'OC/AC',
+                            'OC/AC/NNW',
+                            'OC/AC/NNW/Assistance',
+                            'AC',
+                            'NNW',
+                            'Assistance',
+                            'GAP',
+                            'Przedłużona Gwarancja',
+                        ],
+                    ],
+                    ['type' => 'null'],
+                ],
+            ],
             'data_sprzedazy_lubezpieczenia' => ['type' => ['string', 'null']],
+            'data_sprzedazy_wznowienia' => ['type' => ['string', 'null']],
         ],
         'required' => [
             'stan_pojazdu',
+            'nr_rejestracyjny',
             'marka',
             'model',
             'wersja',
             'vin',
+            'forma_wlasnosci',
             'rocznik',
             'przebieg',
             'wartosc_pojazdu_brutto',
@@ -208,13 +281,29 @@ PROMPT;
             'data_nabycia',
             'data_pierwszej_rejestracji',
             'planowana_data_rejestracji',
+            'wspolposiadacz',
+            'imie_wspolposiadacza',
+            'nazwisko_wspolposiadacza',
+            'pesel_wspolposiadacza',
+            'adres_wspolposiadacza',
             'pakiet_ubezpieczeniowy',
             'rodzaj_assistance',
             'towarzystwo_ubezpieczeniowe',
+            'nr_polisy',
             'kategoria_tu',
             'data_konca_polisy',
             'cena_pakietu',
+            'cena_wznowienia',
+            'pc_cena',
+            'ac_cena',
+            'cena_nnw',
+            'cena_assistance',
+            'gap_cena',
+            'cena_przedluzonej_gwarancji',
+            'pochodzenie_polisy',
+            'rodzaj_polisy',
             'data_sprzedazy_lubezpieczenia',
+            'data_sprzedazy_wznowienia',
         ],
         'additionalProperties' => false,
     ];
