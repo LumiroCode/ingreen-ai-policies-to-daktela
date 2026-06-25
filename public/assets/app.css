@@ -31,8 +31,10 @@ body {
     font-size: 14px;
     line-height: 1.35;
     margin: 0;
-    overflow-y: scroll;
     padding: 10px;
+    height: 768px;
+    display: flex;
+    flex-direction: column;
 }
 
 button,
@@ -41,9 +43,10 @@ input {
 }
 
 .app-shell {
-    margin: 0 auto;
     max-width: 1480px;
-    min-height: 100vh;
+    flex: 1 0 1px;
+    min-width: 0;
+    min-height: 0;
 }
 
 .app-layout {
@@ -51,6 +54,9 @@ input {
     display: grid;
     gap: 12px;
     grid-template-columns: minmax(360px, 520px) minmax(440px, 1fr);
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
 }
 
 .app-flow {
@@ -58,12 +64,16 @@ input {
     flex-direction: column;
     gap: 12px;
     min-width: 0;
+    min-height: 0;
+    height: 100%;
+    overflow-y: scroll;
 }
 
 .app-header {
     flex: 0 0 auto;
     gap: 6px;
     min-width: 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
 }
@@ -124,6 +134,7 @@ h2 {
 .panel,
 .toast,
 .status-message {
+    flex: 0 0 auto;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 8px;
@@ -136,7 +147,7 @@ h2 {
 .pdf-preview-panel {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
-    min-height: calc(768px - 20px);
+    height: 100%;
     position: sticky;
     top: 10px;
 }
@@ -145,7 +156,6 @@ h2 {
     border: 0;
     display: block;
     height: 100%;
-    min-height: 720px;
     width: 100%;
 }
 
