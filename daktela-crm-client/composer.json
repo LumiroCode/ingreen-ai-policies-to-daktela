@@ -1,0 +1,24 @@
+{
+  "name": "ingreen/daktela-crm-client",
+  "description": "Standalone Daktela CRM record and ticket client package.",
+  "type": "library",
+  "license": "proprietary",
+  "autoload": {
+    "psr-4": {
+      "Ingreen\\DaktelaCrmClient\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Ingreen\\DaktelaCrmClient\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "php tests/run.php"
+  },
+  "require": {
+    "php": ">=8.2",
+    "ext-json": "*",
+    "guzzlehttp/guzzle": "^7"
+  }
+}
