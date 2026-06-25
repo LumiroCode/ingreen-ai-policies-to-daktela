@@ -75,7 +75,8 @@ PROMPT;
                         TextBlockParam::with(text: self::PROMPT),
                     ],
                 ]],
-                ['type' => 'adaptive']
+                // ['type' => 'adaptive']
+                null,
             );
         } catch (APIException $exception) {
             throw new AppException(502, 'claude_policy_extraction_failed', 'Claude policy extraction request failed.', [

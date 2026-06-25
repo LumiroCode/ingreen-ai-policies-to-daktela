@@ -1379,7 +1379,7 @@ test('Claude policy extractor sends PDF document and prompt to Claude client', f
     assertSameValue('user', $client->requests[0]['messages'][0]['role']);
     assertTrueValue($client->requests[0]['messages'][0]['content'][0] instanceof DocumentBlockParam);
     assertTrueValue($client->requests[0]['messages'][0]['content'][1] instanceof TextBlockParam);
-    assertSameValue(['type' => 'adaptive'], $client->requests[0]['thinking']);
+    assertSameValue(null, $client->requests[0]['thinking']);
     assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'stan_pojazdu'));
     assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'Nie wymyślaj danych'));
 });
