@@ -158,6 +158,7 @@ $selectedAttachmentTitle = is_array($selectedAttachment)
                 name="confirmation"
                 value="yes"
                 <?= $allLocked ? '' : 'disabled' ?>
+                title="<?= $allLocked ? '' : 'Zaznacz wszystkie pola jako poprawne, aby móc zapisać dane polisy.' ?>"
             >Zapisz</button>
             <button
                 class="button secondary"
