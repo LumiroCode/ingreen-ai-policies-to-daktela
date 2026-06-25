@@ -8,16 +8,18 @@ declare(strict_types=1);
  * @var string|null $selectedAttachmentIndex
  * @var string $ticketId
  * @var string $ticketTitle
+ * @var \Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData|null $extractedData
  */
 
+$attachmentsCollapsed = $extractedData instanceof \Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData;
 ?>
 
-<section class="panel attachment-panel" aria-labelledby="attachments-heading">
+<section class="panel attachment-panel<?= $attachmentsCollapsed ? ' collapsed' : '' ?>" aria-labelledby="attachments-heading">
     <div class="section-heading">
         <button
             class="panel-toggle"
             type="button"
-            aria-expanded="true"
+            aria-expanded="<?= $attachmentsCollapsed ? 'false' : 'true' ?>"
             aria-controls="attachments-panel-content"
         >
             <span class="panel-chevron" aria-hidden="true"></span>
@@ -35,7 +37,7 @@ declare(strict_types=1);
         </form>
     </div>
 
-    <div id="attachments-panel-content" class="panel-content">
+    <div id="attachments-panel-content" class="panel-content"<?= $attachmentsCollapsed ? ' hidden' : '' ?>>
         <?php if ($attachments === []): ?>
             <p class="empty-state">Brak załączników PDF.</p>
         <?php endif; ?>

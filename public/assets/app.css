@@ -290,6 +290,7 @@ h2 {
     gap: 8px;
     position: relative;
     z-index: 20;
+    margin: 0 0 10px;
 }
 
 .toast,
