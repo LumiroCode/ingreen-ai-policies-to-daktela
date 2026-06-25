@@ -134,7 +134,7 @@ $openInDaktelaUrl = is_array($previewAttachment)
                     </div>
                     <?php if ($openInDaktelaUrl !== null): ?>
                         <a
-                            class="button secondary"
+                            class="button secondary pdf-open-in-daktela"
                             href="<?= htmlspecialchars($openInDaktelaUrl, ENT_QUOTES, 'UTF-8') ?>"
                             target="_blank"
                             rel="noopener"

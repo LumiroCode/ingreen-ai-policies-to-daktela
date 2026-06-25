@@ -160,7 +160,7 @@ h2 {
 }
 
 .section-heading {
-    align-items: center;
+    align-items: flex-start;
     border-bottom: 1px solid var(--line);
     display: flex;
     gap: 12px;
@@ -244,6 +244,10 @@ h2 {
     font-size: 12px;
     line-height: 1.25;
     overflow-wrap: anywhere;
+}
+
+.pdf-open-in-daktela {
+    flex: 1 0 auto;
 }
 
 .attachment-list {
@@ -559,7 +563,6 @@ h2 {
     }
 
     .section-heading {
-        align-items: flex-start;
         flex-direction: column;
     }
 
