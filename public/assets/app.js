@@ -13,6 +13,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    document.querySelectorAll('section.panel .panel-toggle').forEach((toggle) => {
+        const contentId = toggle.getAttribute('aria-controls');
+        const content = contentId === null ? null : document.getElementById(contentId);
+        const panel = toggle.closest('section.panel');
+
+        if (content === null || panel === null) {
+            return;
+        }
+
+        toggle.addEventListener('click', () => {
+            const expanded = toggle.getAttribute('aria-expanded') !== 'false';
+
+            toggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+            content.hidden = expanded;
+            panel.classList.toggle('collapsed', expanded);
+        });
+    });
+
     document.querySelectorAll('.attachment-read-form, .attachment-refresh-form').forEach((form) => {
         form.addEventListener('submit', () => {
             const button = form.querySelector('button[type="submit"]');

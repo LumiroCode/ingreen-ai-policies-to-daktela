@@ -34,16 +34,24 @@ $selectedAttachmentTitle = is_array($selectedAttachment)
 <?php if ($policyRows !== []): ?>
 <section class="panel review-panel" aria-labelledby="review-heading">
     <div class="section-heading">
-        <div class="review-title">
-            <h2 id="review-heading">Dane polisy</h2>
-            <?php if ($selectedAttachmentTitle !== null && trim($selectedAttachmentTitle) !== ''): ?>
-                <p><?= htmlspecialchars($selectedAttachmentTitle, ENT_QUOTES, 'UTF-8') ?></p>
-            <?php endif; ?>
-        </div>
+        <button
+            class="panel-toggle"
+            type="button"
+            aria-expanded="true"
+            aria-controls="review-panel-content"
+        >
+            <span class="panel-chevron" aria-hidden="true"></span>
+            <span class="review-title">
+                <span id="review-heading" class="section-heading-title" role="heading" aria-level="2">Dane polisy</span>
+                <?php if ($selectedAttachmentTitle !== null && trim($selectedAttachmentTitle) !== ''): ?>
+                    <span><?= htmlspecialchars($selectedAttachmentTitle, ENT_QUOTES, 'UTF-8') ?></span>
+                <?php endif; ?>
+            </span>
+        </button>
         <span class="count-badge"><?= count($policyRows) ?></span>
     </div>
 
-    <form class="policy-review-form" method="get" novalidate>
+    <form id="review-panel-content" class="policy-review-form panel-content" method="get" novalidate>
         <input type="hidden" name="ticket" value="<?= htmlspecialchars($ticketId, ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="title" value="<?= htmlspecialchars($ticketTitle, ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="attachment" value="<?= htmlspecialchars((string) $selectedAttachmentIndex, ENT_QUOTES, 'UTF-8') ?>">
