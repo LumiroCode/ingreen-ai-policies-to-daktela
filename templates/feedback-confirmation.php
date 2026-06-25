@@ -23,10 +23,23 @@ if ($extractedData instanceof \Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedP
         ];
     }
 
+    $vehicleRows = array_intersect_key(
+        $policyRows,
+        array_fill_keys(\Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData::VEHICLE_FIELDS, true)
+    );
+    $insuranceRows = array_intersect_key(
+        $policyRows,
+        array_fill_keys(\Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData::POLICY_FIELDS, true)
+    );
+
     $policyGroups = [
         [
             'label' => 'Dane pojazdu',
-            'rows' => $policyRows,
+            'rows' => $vehicleRows,
+        ],
+        [
+            'label' => 'Dane polisy',
+            'rows' => $insuranceRows,
         ],
     ];
 }

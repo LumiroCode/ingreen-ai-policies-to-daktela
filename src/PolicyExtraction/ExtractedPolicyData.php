@@ -23,6 +23,42 @@ final class ExtractedPolicyData
         'data_nabycia',
         'data_pierwszej_rejestracji',
         'planowana_data_rejestracji',
+        'pakiet_ubezpieczeniowy',
+        'rodzaj_assistance',
+        'towarzystwo_ubezpieczeniowe',
+        'kategoria_tu',
+        'data_konca_polisy',
+        'cena_pakietu',
+        'data_sprzedazy_lubezpieczenia',
+    ];
+
+    public const VEHICLE_FIELDS = [
+        'stan_pojazdu',
+        'marka',
+        'model',
+        'wersja',
+        'vin',
+        'rocznik',
+        'przebieg',
+        'wartosc_pojazdu_brutto',
+        'wartosc_pojazdu_netto',
+        'kategoria_pojazdu',
+        'sposob_korzystania',
+        'typ_silnika',
+        'pojemnosc_silnika',
+        'data_nabycia',
+        'data_pierwszej_rejestracji',
+        'planowana_data_rejestracji',
+    ];
+
+    public const POLICY_FIELDS = [
+        'pakiet_ubezpieczeniowy',
+        'rodzaj_assistance',
+        'towarzystwo_ubezpieczeniowe',
+        'kategoria_tu',
+        'data_konca_polisy',
+        'cena_pakietu',
+        'data_sprzedazy_lubezpieczenia',
     ];
 
     public const LABELS = [
@@ -42,6 +78,13 @@ final class ExtractedPolicyData
         'data_nabycia' => 'Data nabycia',
         'data_pierwszej_rejestracji' => 'Data pierwszej rejestracji',
         'planowana_data_rejestracji' => 'Planowana data rejestracji',
+        'pakiet_ubezpieczeniowy' => 'Pakiet ubezpieczeniowy',
+        'rodzaj_assistance' => 'Rodzaj assistance',
+        'towarzystwo_ubezpieczeniowe' => 'Towarzystwo ubezpieczeniowe',
+        'kategoria_tu' => 'Kategoria TU',
+        'data_konca_polisy' => 'Data końca polisy',
+        'cena_pakietu' => 'Cena pakietu pierwszy rok',
+        'data_sprzedazy_lubezpieczenia' => 'Data sprzedaży ubezpieczenia pierwszy rok',
     ];
 
     /** @var array<string,string|null> */

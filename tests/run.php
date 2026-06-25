@@ -10,6 +10,7 @@ use Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataExtractor;
 use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\ClaudeMessagesClient;
 use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\ClaudePolicyDataExtractor;
+use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyConfirmationForm;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataResponseParser;
 use Ingreen\DaktelaPolicy\Support\AppException;
 use Ingreen\DaktelaPolicy\TicketPdfAttachments;
@@ -863,6 +864,8 @@ test('configured utility origin allows signed in-app attachment request', functi
     assertSameValue('text/html; charset=UTF-8', $download['headers']['Content-Type']);
     assertTrueValue(str_contains($download['body'], 'Dane polisy'));
     assertTrueValue(str_contains($download['body'], 'Dane pojazdu'));
+    assertTrueValue(str_contains($download['body'], 'Towarzystwo ubezpieczeniowe'));
+    assertTrueValue(str_contains($download['body'], 'name="policy_data[pakiet_ubezpieczeniowy]"'));
     assertTrueValue(str_contains($download['body'], 'scan.pdf'));
     assertTrueValue(str_contains($download['body'], 'Marka'));
     assertTrueValue(str_contains($download['body'], 'Model'));
@@ -915,24 +918,7 @@ test('confirmed policy data loaded from cache is locked by default', function ()
             'model' => 'Octavia',
             'wartosc_pojazdu_brutto' => '50 000 CZK',
         ],
-        policyLocked: [
-            'stan_pojazdu' => '1',
-            'marka' => '1',
-            'model' => '1',
-            'wersja' => '1',
-            'vin' => '1',
-            'rocznik' => '1',
-            'przebieg' => '1',
-            'wartosc_pojazdu_brutto' => '1',
-            'wartosc_pojazdu_netto' => '1',
-            'kategoria_pojazdu' => '1',
-            'sposob_korzystania' => '1',
-            'typ_silnika' => '1',
-            'pojemnosc_silnika' => '1',
-            'data_nabycia' => '1',
-            'data_pierwszej_rejestracji' => '1',
-            'planowana_data_rejestracji' => '1',
-        ]
+        policyLocked: PolicyConfirmationForm::allLockedFields()
     );
     $cached = $app->handle('123', '0', daktelaAccessToken('123'));
 
@@ -1315,24 +1301,7 @@ test('policy confirmation storage error preserves submitted policy form state', 
             'model' => 'Manualny model',
             'wartosc_pojazdu_brutto' => '123 456 PLN',
         ],
-        policyLocked: [
-            'stan_pojazdu' => '1',
-            'marka' => '1',
-            'model' => '1',
-            'wersja' => '1',
-            'vin' => '1',
-            'rocznik' => '1',
-            'przebieg' => '1',
-            'wartosc_pojazdu_brutto' => '1',
-            'wartosc_pojazdu_netto' => '1',
-            'kategoria_pojazdu' => '1',
-            'sposob_korzystania' => '1',
-            'typ_silnika' => '1',
-            'pojemnosc_silnika' => '1',
-            'data_nabycia' => '1',
-            'data_pierwszej_rejestracji' => '1',
-            'planowana_data_rejestracji' => '1',
-        ]
+        policyLocked: PolicyConfirmationForm::allLockedFields()
     );
 
     assertSameValue(500, $response['status']);
@@ -1488,7 +1457,7 @@ test('app logger writes JSON lines to configured log file', function (): void {
 
 test('policy data parser maps Claude JSON response to extracted policy data', function (): void {
     $data = (new PolicyDataResponseParser())->parse('```json
-{"stan_pojazdu":"Używany","marka":"Toyota","model":"Corolla","wersja":"Comfort","vin":"JT123","rocznik":"2022","przebieg":"12000","wartosc_pojazdu_brutto":"123 000 PLN","wartosc_pojazdu_netto":null,"kategoria_pojazdu":"Osobowy (Kat. M1)","sposob_korzystania":"Standardowy","typ_silnika":"Hybryda","pojemnosc_silnika":"1798","data_nabycia":"2024-01-01","data_pierwszej_rejestracji":"2022-03-01","planowana_data_rejestracji":null}
+{"stan_pojazdu":"Używany","marka":"Toyota","model":"Corolla","wersja":"Comfort","vin":"JT123","rocznik":"2022","przebieg":"12000","wartosc_pojazdu_brutto":"123 000 PLN","wartosc_pojazdu_netto":null,"kategoria_pojazdu":"Osobowy (Kat. M1)","sposob_korzystania":"Standardowy","typ_silnika":"Hybryda","pojemnosc_silnika":"1798","data_nabycia":"2024-01-01","data_pierwszej_rejestracji":"2022-03-01","planowana_data_rejestracji":null,"pakiet_ubezpieczeniowy":"tak","rodzaj_assistance":"Polska","towarzystwo_ubezpieczeniowe":"PZU","kategoria_tu":"Partner InGreen","data_konca_polisy":"2025-03-01","cena_pakietu":"3200 PLN","data_sprzedazy_lubezpieczenia":"2024-03-01"}
 ```');
 
     assertSameValue('Toyota', $data->carMake);
@@ -1497,6 +1466,9 @@ test('policy data parser maps Claude JSON response to extracted policy data', fu
     assertSameValue('Używany', $data->field('stan_pojazdu'));
     assertSameValue('JT123', $data->field('vin'));
     assertSameValue('Hybryda', $data->field('typ_silnika'));
+    assertSameValue('tak', $data->field('pakiet_ubezpieczeniowy'));
+    assertSameValue('PZU', $data->field('towarzystwo_ubezpieczeniowe'));
+    assertSameValue('3200 PLN', $data->field('cena_pakietu'));
 });
 
 test('policy data parser extracts JSON object from descriptive Claude response', function (): void {
@@ -1515,6 +1487,8 @@ Model pojazdu: 3
 Numer VIN: /
 Wartość pojazdu brutto: 204000 PLN
 Typ silnika: Elektryczny
+Towarzystwo ubezpieczeniowe: Warta
+Data końca polisy: 2026-05-20
 ');
 
     assertSameValue('Nowy', $data->field('stan_pojazdu'));
@@ -1523,6 +1497,8 @@ Typ silnika: Elektryczny
     assertSameValue(null, $data->field('vin'));
     assertSameValue('204000 PLN', $data->field('wartosc_pojazdu_brutto'));
     assertSameValue('Elektryczny', $data->field('typ_silnika'));
+    assertSameValue('Warta', $data->field('towarzystwo_ubezpieczeniowe'));
+    assertSameValue('2026-05-20', $data->field('data_konca_polisy'));
 });
 
 test('policy data parser ignores unrelated JSON before key value lines', function (): void {
@@ -1564,8 +1540,13 @@ test('Claude policy extractor sends PDF document and prompt to Claude client', f
     assertSameValue('null', $client->requests[0]['outputConfig']['format']['schema']['properties']['sposob_korzystania']['anyOf'][1]['type']);
     assertSameValue(['Nowy', 'Używany', 'Nieznany'], $client->requests[0]['outputConfig']['format']['schema']['properties']['stan_pojazdu']['anyOf'][0]['enum']);
     assertSameValue('null', $client->requests[0]['outputConfig']['format']['schema']['properties']['stan_pojazdu']['anyOf'][1]['type']);
+    assertSameValue(['tak', 'nie'], $client->requests[0]['outputConfig']['format']['schema']['properties']['pakiet_ubezpieczeniowy']['anyOf'][0]['enum']);
+    assertTrueValue(in_array('PZU', $client->requests[0]['outputConfig']['format']['schema']['properties']['towarzystwo_ubezpieczeniowe']['anyOf'][0]['enum'], true));
+    assertSameValue(['Partner InGreen', 'Asap', 'Wiktoria'], $client->requests[0]['outputConfig']['format']['schema']['properties']['kategoria_tu']['anyOf'][0]['enum']);
     assertTrueValue(in_array('planowana_data_rejestracji', $client->requests[0]['outputConfig']['format']['schema']['required'], true));
+    assertTrueValue(in_array('data_sprzedazy_lubezpieczenia', $client->requests[0]['outputConfig']['format']['schema']['required'], true));
     assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'stan_pojazdu'));
+    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'towarzystwo_ubezpieczeniowe'));
     assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'Nie wymyślaj danych'));
 });
 
