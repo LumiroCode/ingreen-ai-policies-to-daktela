@@ -66,16 +66,27 @@ final class NullLogger extends AppLogger
 
 final class FakeClaudeMessagesClient implements ClaudeMessagesClient
 {
-    /** @var list<array{model:string,maxTokens:int,messages:list<array{role:string,content:list<object>}>,thinking:array<string,mixed>|null}> */
+    /** @var list<array{model:string,maxTokens:int,messages:list<array{role:string,content:list<object>}>,thinking:array<string,mixed>|null,outputConfig:array<string,mixed>|null}> */
     public array $requests = [];
 
     public function __construct(private readonly string $response)
     {
     }
 
-    public function createMessage(string $model, int $maxTokens, array $messages, ?array $thinking = null): string
-    {
-        $this->requests[] = ['model' => $model, 'maxTokens' => $maxTokens, 'messages' => $messages, 'thinking' => $thinking];
+    public function createMessage(
+        string $model,
+        int $maxTokens,
+        array $messages,
+        ?array $thinking = null,
+        ?array $outputConfig = null
+    ): string {
+        $this->requests[] = [
+            'model' => $model,
+            'maxTokens' => $maxTokens,
+            'messages' => $messages,
+            'thinking' => $thinking,
+            'outputConfig' => $outputConfig,
+        ];
 
         return $this->response;
     }
@@ -1419,6 +1430,11 @@ test('Claude policy extractor sends PDF document and prompt to Claude client', f
     assertTrueValue($client->requests[0]['messages'][0]['content'][0] instanceof DocumentBlockParam);
     assertTrueValue($client->requests[0]['messages'][0]['content'][1] instanceof TextBlockParam);
     assertSameValue(null, $client->requests[0]['thinking']);
+    assertSameValue('json_schema', $client->requests[0]['outputConfig']['format']['type']);
+    assertSameValue(false, $client->requests[0]['outputConfig']['format']['schema']['additionalProperties']);
+    assertSameValue(['string', 'null'], $client->requests[0]['outputConfig']['format']['schema']['properties']['marka']['type']);
+    assertSameValue(['Standardowy', 'Taxi', null], $client->requests[0]['outputConfig']['format']['schema']['properties']['sposob_korzystania']['enum']);
+    assertTrueValue(in_array('planowana_data_rejestracji', $client->requests[0]['outputConfig']['format']['schema']['required'], true));
     assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'stan_pojazdu'));
     assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'Nie wymyślaj danych'));
 });

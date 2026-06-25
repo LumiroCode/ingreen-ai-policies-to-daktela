@@ -18,13 +18,19 @@ final class AnthropicClaudeMessagesClient implements ClaudeMessagesClient
         return new self(new Client(apiKey: $apiKey));
     }
 
-    public function createMessage(string $model, int $maxTokens, array $messages, ?array $thinking = null): string
-    {
+    public function createMessage(
+        string $model,
+        int $maxTokens,
+        array $messages,
+        ?array $thinking = null,
+        ?array $outputConfig = null
+    ): string {
         $message = $this->client->messages->create(
             model: $model,
             maxTokens: $maxTokens,
             messages: $messages,
-            thinking: $thinking
+            thinking: $thinking,
+            outputConfig: $outputConfig
         );
 
         $text = '';

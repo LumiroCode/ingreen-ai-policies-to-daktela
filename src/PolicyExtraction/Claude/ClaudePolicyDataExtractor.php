@@ -52,6 +52,64 @@ Reguły normalizacji:
 - Jeśli dokument podaje "/", "-", "brak", puste pole albo wartość niejednoznaczną, zwróć null.
 PROMPT;
 
+    private const OUTPUT_SCHEMA = [
+        'type' => 'object',
+        'properties' => [
+            'stan_pojazdu' => [
+                'type' => ['string', 'null'],
+                'enum' => ['Nowy', 'Używany', 'Nieznany', null],
+            ],
+            'marka' => ['type' => ['string', 'null']],
+            'model' => ['type' => ['string', 'null']],
+            'wersja' => ['type' => ['string', 'null']],
+            'vin' => ['type' => ['string', 'null']],
+            'rocznik' => ['type' => ['string', 'null']],
+            'przebieg' => ['type' => ['string', 'null']],
+            'wartosc_pojazdu_brutto' => ['type' => ['string', 'null']],
+            'wartosc_pojazdu_netto' => ['type' => ['string', 'null']],
+            'kategoria_pojazdu' => [
+                'type' => ['string', 'null'],
+                'enum' => [
+                    'Osobowy (Kat. M1)',
+                    'Ciężarowy - LCV (DMC do 3500kg) Kat. N1',
+                    'Motocykle i inne pojazdy (kat.L)',
+                    null,
+                ],
+            ],
+            'sposob_korzystania' => [
+                'type' => ['string', 'null'],
+                'enum' => ['Standardowy', 'Taxi', null],
+            ],
+            'typ_silnika' => [
+                'type' => ['string', 'null'],
+                'enum' => ['Benzynowy', 'CNG/LPG', 'Diesel', 'Elektryczny', 'Hybryda', null],
+            ],
+            'pojemnosc_silnika' => ['type' => ['string', 'null']],
+            'data_nabycia' => ['type' => ['string', 'null']],
+            'data_pierwszej_rejestracji' => ['type' => ['string', 'null']],
+            'planowana_data_rejestracji' => ['type' => ['string', 'null']],
+        ],
+        'required' => [
+            'stan_pojazdu',
+            'marka',
+            'model',
+            'wersja',
+            'vin',
+            'rocznik',
+            'przebieg',
+            'wartosc_pojazdu_brutto',
+            'wartosc_pojazdu_netto',
+            'kategoria_pojazdu',
+            'sposob_korzystania',
+            'typ_silnika',
+            'pojemnosc_silnika',
+            'data_nabycia',
+            'data_pierwszej_rejestracji',
+            'planowana_data_rejestracji',
+        ],
+        'additionalProperties' => false,
+    ];
+
     public function __construct(
         private readonly ClaudeMessagesClient $client,
         private readonly PolicyDataResponseParser $parser = new PolicyDataResponseParser(),
@@ -77,6 +135,12 @@ PROMPT;
                 ]],
                 // ['type' => 'adaptive']
                 null,
+                [
+                    'format' => [
+                        'type' => 'json_schema',
+                        'schema' => self::OUTPUT_SCHEMA,
+                    ],
+                ],
             );
         } catch (APIException $exception) {
             throw new AppException(502, 'claude_policy_extraction_failed', 'Claude policy extraction request failed.', [
