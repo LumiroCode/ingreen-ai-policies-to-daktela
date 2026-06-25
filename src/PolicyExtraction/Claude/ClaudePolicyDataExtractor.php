@@ -56,8 +56,10 @@ PROMPT;
         'type' => 'object',
         'properties' => [
             'stan_pojazdu' => [
-                'type' => ['string', 'null'],
-                'enum' => ['Nowy', 'Używany', 'Nieznany', null],
+                'anyOf' => [
+                    ['type' => 'string', 'enum' => ['Nowy', 'Używany', 'Nieznany']],
+                    ['type' => 'null'],
+                ],
             ],
             'marka' => ['type' => ['string', 'null']],
             'model' => ['type' => ['string', 'null']],
@@ -68,21 +70,29 @@ PROMPT;
             'wartosc_pojazdu_brutto' => ['type' => ['string', 'null']],
             'wartosc_pojazdu_netto' => ['type' => ['string', 'null']],
             'kategoria_pojazdu' => [
-                'type' => ['string', 'null'],
-                'enum' => [
-                    'Osobowy (Kat. M1)',
-                    'Ciężarowy - LCV (DMC do 3500kg) Kat. N1',
-                    'Motocykle i inne pojazdy (kat.L)',
-                    null,
+                'anyOf' => [
+                    [
+                        'type' => 'string',
+                        'enum' => [
+                            'Osobowy (Kat. M1)',
+                            'Ciężarowy - LCV (DMC do 3500kg) Kat. N1',
+                            'Motocykle i inne pojazdy (kat.L)',
+                        ],
+                    ],
+                    ['type' => 'null'],
                 ],
             ],
             'sposob_korzystania' => [
-                'type' => ['string', 'null'],
-                'enum' => ['Standardowy', 'Taxi', null],
+                'anyOf' => [
+                    ['type' => 'string', 'enum' => ['Standardowy', 'Taxi']],
+                    ['type' => 'null'],
+                ],
             ],
             'typ_silnika' => [
-                'type' => ['string', 'null'],
-                'enum' => ['Benzynowy', 'CNG/LPG', 'Diesel', 'Elektryczny', 'Hybryda', null],
+                'anyOf' => [
+                    ['type' => 'string', 'enum' => ['Benzynowy', 'CNG/LPG', 'Diesel', 'Elektryczny', 'Hybryda']],
+                    ['type' => 'null'],
+                ],
             ],
             'pojemnosc_silnika' => ['type' => ['string', 'null']],
             'data_nabycia' => ['type' => ['string', 'null']],

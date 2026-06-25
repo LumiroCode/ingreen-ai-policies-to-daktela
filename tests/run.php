@@ -1218,6 +1218,133 @@ test('selected PDF attachment extraction error renders message under table', fun
     assertTrueValue(str_contains($response['body'], 'Wystąpił nieoczekiwany błąd podczas odczytu danych z polisy.'));
 });
 
+test('selected PDF attachment parse error preserves selected attachment and preview', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/policy.pdf', 'title' => 'policy.pdf', 'type' => 'application/pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/files/policy.pdf' => pdfResponse(),
+    ]);
+
+    $response = app($fake, tempDir(), extractor: new FakePolicyDataExtractor(exception: new AppException(502, 'policy_extraction_parse_failed', 'Claude did not return valid policy extraction JSON.')))
+        ->handle('123', '0', daktelaAccessToken('123'));
+
+    assertSameValue(502, $response['status']);
+    assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
+    assertTrueValue(str_contains($response['body'], 'Claude zwrócił odpowiedź w nieoczekiwanym formacie.'));
+    assertTrueValue(str_contains($response['body'], 'class="attachment-row attachment-read-form selected"'));
+    assertTrueValue(str_contains($response['body'], 'Podgląd PDF'));
+    assertTrueValue(str_contains($response['body'], 'policy_pdf=1'));
+});
+
+test('policy reread error preserves submitted policy form state', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/policy.pdf', 'title' => 'policy.pdf', 'type' => 'application/pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/files/policy.pdf' => pdfResponse(),
+    ]);
+
+    $response = app($fake, tempDir(), extractor: new FakePolicyDataExtractor(exception: new AppException(502, 'policy_extraction_parse_failed', 'Claude did not return valid policy extraction JSON.')))
+        ->handle(
+            '123',
+            '0',
+            daktelaAccessToken('123'),
+            confirmation: 'no',
+            policyData: [
+                'marka' => 'Manualna marka',
+                'model' => 'Manualny model',
+                'wartosc_pojazdu_brutto' => '123 456 PLN',
+            ],
+            policyLocked: [
+                'marka' => '1',
+            ]
+        );
+
+    assertSameValue(502, $response['status']);
+    assertTrueValue(str_contains($response['body'], 'Claude zwrócił odpowiedź w nieoczekiwanym formacie.'));
+    assertTrueValue(str_contains($response['body'], 'class="attachment-row attachment-read-form selected"'));
+    assertTrueValue(str_contains($response['body'], 'policy_pdf=1'));
+    assertTrueValue(str_contains($response['body'], 'Dane polisy'));
+    assertTrueValue(str_contains($response['body'], 'value="Manualna marka"'));
+    assertTrueValue(str_contains($response['body'], 'value="Manualny model"'));
+    assertTrueValue(str_contains($response['body'], 'value="123 456 PLN"'));
+    assertPolicyFieldLocked($response['body'], 'marka');
+});
+
+test('policy confirmation storage error preserves submitted policy form state', function (): void {
+    $dir = tempDir();
+    mkdir($dir . '/var', 0775, true);
+    file_put_contents($dir . '/var/policy-data', 'not a directory');
+
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/policy.pdf', 'title' => 'policy.pdf', 'type' => 'application/pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+    ]);
+
+    $response = app($fake, $dir)->handle(
+        '123',
+        '0',
+        daktelaAccessToken('123'),
+        confirmation: 'yes',
+        policyData: [
+            'stan_pojazdu' => 'Nowy',
+            'marka' => 'Manualna marka',
+            'model' => 'Manualny model',
+            'wartosc_pojazdu_brutto' => '123 456 PLN',
+        ],
+        policyLocked: [
+            'stan_pojazdu' => '1',
+            'marka' => '1',
+            'model' => '1',
+            'wersja' => '1',
+            'vin' => '1',
+            'rocznik' => '1',
+            'przebieg' => '1',
+            'wartosc_pojazdu_brutto' => '1',
+            'wartosc_pojazdu_netto' => '1',
+            'kategoria_pojazdu' => '1',
+            'sposob_korzystania' => '1',
+            'typ_silnika' => '1',
+            'pojemnosc_silnika' => '1',
+            'data_nabycia' => '1',
+            'data_pierwszej_rejestracji' => '1',
+            'planowana_data_rejestracji' => '1',
+        ]
+    );
+
+    assertSameValue(500, $response['status']);
+    assertTrueValue(str_contains($response['body'], 'Nie udało się zapisać potwierdzonych danych polisy.'));
+    assertTrueValue(str_contains($response['body'], 'class="attachment-row attachment-read-form selected"'));
+    assertTrueValue(str_contains($response['body'], 'policy_pdf=1'));
+    assertTrueValue(str_contains($response['body'], 'value="Manualna marka"'));
+    assertTrueValue(str_contains($response['body'], 'value="Manualny model"'));
+    assertTrueValue(str_contains($response['body'], 'value="123 456 PLN"'));
+    assertPolicyFieldLocked($response['body'], 'marka');
+});
+
 test('selected PDF attachment Claude extraction error renders Claude message under table', function (): void {
     $fake = new FakeDaktela([
         '/api/v6/tickets/123' => jsonResponse([
@@ -1433,7 +1560,10 @@ test('Claude policy extractor sends PDF document and prompt to Claude client', f
     assertSameValue('json_schema', $client->requests[0]['outputConfig']['format']['type']);
     assertSameValue(false, $client->requests[0]['outputConfig']['format']['schema']['additionalProperties']);
     assertSameValue(['string', 'null'], $client->requests[0]['outputConfig']['format']['schema']['properties']['marka']['type']);
-    assertSameValue(['Standardowy', 'Taxi', null], $client->requests[0]['outputConfig']['format']['schema']['properties']['sposob_korzystania']['enum']);
+    assertSameValue(['Standardowy', 'Taxi'], $client->requests[0]['outputConfig']['format']['schema']['properties']['sposob_korzystania']['anyOf'][0]['enum']);
+    assertSameValue('null', $client->requests[0]['outputConfig']['format']['schema']['properties']['sposob_korzystania']['anyOf'][1]['type']);
+    assertSameValue(['Nowy', 'Używany', 'Nieznany'], $client->requests[0]['outputConfig']['format']['schema']['properties']['stan_pojazdu']['anyOf'][0]['enum']);
+    assertSameValue('null', $client->requests[0]['outputConfig']['format']['schema']['properties']['stan_pojazdu']['anyOf'][1]['type']);
     assertTrueValue(in_array('planowana_data_rejestracji', $client->requests[0]['outputConfig']['format']['schema']['required'], true));
     assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'stan_pojazdu'));
     assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'Nie wymyślaj danych'));

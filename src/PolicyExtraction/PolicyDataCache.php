@@ -88,7 +88,7 @@ final class PolicyDataCache
     {
         $directory = dirname($path);
 
-        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+        if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
             throw new AppException(500, 'policy_data_storage_failed', 'Could not create policy data directory.', [
                 'directory' => $directory,
             ]);

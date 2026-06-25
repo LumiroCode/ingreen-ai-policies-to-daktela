@@ -321,10 +321,14 @@ final class WebhookApp
             return [
                 'status' => $exception->statusCode(),
                 'headers' => $this->accessGuard->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
-                'body' => $this->renderPage($ticketId, $attachments, [
-                    'type' => 'error',
-                    'text' => $this->policyProcessingErrorMessage($exception),
-                ], ticketTitle: $ticketTitle),
+                'body' => $this->renderPolicyProcessingErrorPage(
+                    $ticketId,
+                    $attachments,
+                    $exception,
+                    $attachmentIndex,
+                    $confirmationForm,
+                    $ticketTitle
+                ),
             ];
         } catch (Throwable $exception) {
             $this->logger->exception($exception, [
@@ -336,10 +340,14 @@ final class WebhookApp
             return [
                 'status' => 500,
                 'headers' => $this->accessGuard->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
-                'body' => $this->renderPage($ticketId, $attachments, [
-                    'type' => 'error',
-                    'text' => $this->policyProcessingErrorMessage($exception),
-                ], ticketTitle: $ticketTitle),
+                'body' => $this->renderPolicyProcessingErrorPage(
+                    $ticketId,
+                    $attachments,
+                    $exception,
+                    $attachmentIndex,
+                    $confirmationForm,
+                    $ticketTitle
+                ),
             ];
         }
     }
@@ -390,12 +398,42 @@ final class WebhookApp
             return [
                 'status' => $exception->statusCode(),
                 'headers' => $this->accessGuard->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
-                'body' => $this->renderPage($ticketId, $attachments, [
-                    'type' => 'error',
-                    'text' => $this->policyProcessingErrorMessage($exception),
-                ], ticketTitle: $ticketTitle),
+                'body' => $this->renderPolicyProcessingErrorPage(
+                    $ticketId,
+                    $attachments,
+                    $exception,
+                    $attachmentIndex,
+                    $confirmationForm,
+                    $ticketTitle
+                ),
             ];
         }
+    }
+
+    /**
+     * @param list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
+     */
+    private function renderPolicyProcessingErrorPage(
+        string $ticketId,
+        array $attachments,
+        Throwable $exception,
+        string $attachmentIndex,
+        ?PolicyConfirmationForm $confirmationForm,
+        ?string $ticketTitle
+    ): string
+    {
+        return $this->renderPage(
+            $ticketId,
+            $attachments,
+            [
+                'type' => 'error',
+                'text' => $this->policyProcessingErrorMessage($exception),
+            ],
+            $confirmationForm?->toPolicyData(),
+            $attachmentIndex,
+            $confirmationForm?->lockedFields() ?? [],
+            $ticketTitle
+        );
     }
 
     /**
