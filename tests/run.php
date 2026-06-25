@@ -1361,6 +1361,45 @@ test('policy data parser maps Claude JSON response to extracted policy data', fu
     assertSameValue('Hybryda', $data->field('typ_silnika'));
 });
 
+test('policy data parser extracts JSON object from descriptive Claude response', function (): void {
+    $data = (new PolicyDataResponseParser())->parse('Znalazłem dane pojazdu. Odpowiedź końcowa: {"marka":"Skoda","model":"Octavia","vin":"TMB123"} Dziękuję.');
+
+    assertSameValue('Skoda', $data->field('marka'));
+    assertSameValue('Octavia', $data->field('model'));
+    assertSameValue('TMB123', $data->field('vin'));
+});
+
+test('policy data parser falls back to key value lines', function (): void {
+    $data = (new PolicyDataResponseParser())->parse('
+Stan pojazdu: Nowy
+Marka pojazdu: Tesla
+Model pojazdu: 3
+Numer VIN: /
+Wartość pojazdu brutto: 204000 PLN
+Typ silnika: Elektryczny
+');
+
+    assertSameValue('Nowy', $data->field('stan_pojazdu'));
+    assertSameValue('Tesla', $data->field('marka'));
+    assertSameValue('3', $data->field('model'));
+    assertSameValue(null, $data->field('vin'));
+    assertSameValue('204000 PLN', $data->field('wartosc_pojazdu_brutto'));
+    assertSameValue('Elektryczny', $data->field('typ_silnika'));
+});
+
+test('policy data parser ignores unrelated JSON before key value lines', function (): void {
+    $data = (new PolicyDataResponseParser())->parse('
+Najpierw notatka techniczna: {"status":"ok"}
+Marka: Kia
+Model: Niro
+Wartość brutto: 150000 PLN
+');
+
+    assertSameValue('Kia', $data->field('marka'));
+    assertSameValue('Niro', $data->field('model'));
+    assertSameValue('150000 PLN', $data->field('wartosc_pojazdu_brutto'));
+});
+
 test('Claude policy extractor sends PDF document and prompt to Claude client', function (): void {
     $dir = tempDir();
     $pdfPath = $dir . '/policy.pdf';
