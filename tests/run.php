@@ -191,7 +191,7 @@ function app(FakeDaktela $fake, string $dir, ?string $allowedUtilityOrigin = nul
         new TicketPdfAttachments($daktela, $logger, $config->cacheDir),
         $extractor ?? new FakePolicyDataExtractor(),
         $logger,
-        new DaktelaTicketPolicyValuesProvider($daktela)
+        new DaktelaTicketPolicyValuesProvider($daktela, $logger)
     );
 }
 
