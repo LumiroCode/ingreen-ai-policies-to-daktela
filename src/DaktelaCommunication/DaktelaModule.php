@@ -52,7 +52,7 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
         $this->getCrmRecordsByTicketId = new GetCrmRecordsByTicketId($this->service, $logger);
         $this->createPolicyCrmRecord = new CreatePolicyCrmRecord($this->service);
         $this->createVehicleCrmRecord = new CreateVehicleCrmRecord($this->service);
-        $this->findCrmRecordIdentifiersByTitle = new FindCrmRecordIdentifiersByTitle($this->getCrmRecordsByTicketId);
+        $this->findCrmRecordIdentifiersByTitle = new FindCrmRecordIdentifiersByTitle($this->getCrmRecordsByTicketId, $logger);
         $this->getTicketByName = new GetTicketByName($this->service);
         $this->getTicketAttachments = new GetTicketAttachments($this->service, $logger);
         $this->updatePolicyCrmRecord = new UpdatePolicyCrmRecord($this->service);

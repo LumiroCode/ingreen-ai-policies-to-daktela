@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers;
 
+use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\Support\AppException;
 
 /**
@@ -11,8 +12,10 @@ use Ingreen\DaktelaPolicy\Support\AppException;
  */
 final class FindCrmRecordIdentifiersByTitle
 {
-    public function __construct(private readonly GetCrmRecordsByTicketId $getCrmRecordsByTicketId)
-    {
+    public function __construct(
+        private readonly GetCrmRecordsByTicketId $getCrmRecordsByTicketId,
+        private readonly ?AppLogger $logger = null
+    ) {
     }
 
     /**
@@ -71,18 +74,54 @@ final class FindCrmRecordIdentifiersByTitle
      */
     private function isMatchingRecord(array $record, string $recordTitle, string $registrationNumber, string $vin): bool
     {
-        if (($record['title'] ?? null) !== $recordTitle) {
+        if (!$this->recordTitleMatches($record, $recordTitle)) {
+            $this->logger?->info('Daktela CRM record skipped because type title did not match lookup title.', [
+                'recordName' => $this->scalarString($record['name'] ?? null),
+                'expectedTitle' => $recordTitle,
+                'recordTitle' => $this->scalarString($record['title'] ?? null),
+                'recordTypeTitle' => $this->recordTypeTitle($record),
+            ]);
+
             return false;
         }
 
         $customFields = $record['customFields'] ?? null;
 
         if (!is_array($customFields) || array_is_list($customFields)) {
+            $this->logger?->info('Daktela CRM record skipped because custom fields were not a keyed object.', [
+                'recordName' => $this->scalarString($record['name'] ?? null),
+                'recordTitle' => $recordTitle,
+                'customFieldsType' => get_debug_type($customFields),
+            ]);
+
             return false;
         }
 
         return $this->fieldMatches($customFields['nr_rejestracyjny'] ?? null, $registrationNumber)
             || $this->fieldMatches($customFields['vin'] ?? null, $vin);
+    }
+
+    /**
+     * @param array<string,mixed> $record
+     */
+    private function recordTitleMatches(array $record, string $recordTitle): bool
+    {
+        return $this->scalarString($record['title'] ?? null) === $recordTitle
+            || $this->recordTypeTitle($record) === $recordTitle;
+    }
+
+    /**
+     * @param array<string,mixed> $record
+     */
+    private function recordTypeTitle(array $record): ?string
+    {
+        $type = $record['type'] ?? null;
+
+        if (!is_array($type)) {
+            return null;
+        }
+
+        return $this->scalarString($type['title'] ?? null);
     }
 
     private function fieldMatches(mixed $recordValue, string $lookupValue): bool
@@ -94,6 +133,27 @@ final class FindCrmRecordIdentifiersByTitle
     }
 
     private function scalarString(mixed $value): ?string
+    {
+        if (is_array($value)) {
+            if (!array_is_list($value)) {
+                return null;
+            }
+
+            foreach ($value as $item) {
+                $scalar = $this->scalarPrimitiveString($item);
+
+                if ($scalar !== null) {
+                    return $scalar;
+                }
+            }
+
+            return null;
+        }
+
+        return $this->scalarPrimitiveString($value);
+    }
+
+    private function scalarPrimitiveString(mixed $value): ?string
     {
         if (!is_string($value) && !is_int($value) && !is_float($value)) {
             return null;

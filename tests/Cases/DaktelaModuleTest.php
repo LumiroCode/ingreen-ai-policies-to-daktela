@@ -216,12 +216,31 @@ test('Daktela module finds policy CRM record identifiers by registration number 
                         'customFields' => [],
                     ],
                     [
-                        'name' => 'record_non_scalar_field',
+                        'name' => 'record_array_wrapped_fields',
                         'title' => 'Polisy',
                         'ticket' => ['name' => 'ABC/123'],
                         'customFields' => [
                             'nr_rejestracyjny' => ['WX12345'],
                             'vin' => ['TMB123'],
+                        ],
+                    ],
+                    [
+                        'name' => 'record_type_title',
+                        'title' => 'Dowolny tytuł',
+                        'type' => ['title' => 'Polisy'],
+                        'ticket' => ['name' => 'ABC/123'],
+                        'customFields' => [
+                            'nr_rejestracyjny' => 'WX12345',
+                            'vin' => 'OTHER',
+                        ],
+                    ],
+                    [
+                        'name' => 'record_nested_non_value_field',
+                        'title' => 'Polisy',
+                        'ticket' => ['name' => 'ABC/123'],
+                        'customFields' => [
+                            'nr_rejestracyjny' => [['WX12345']],
+                            'vin' => ['value' => 'TMB123'],
                         ],
                     ],
                 ],
@@ -233,7 +252,7 @@ test('Daktela module finds policy CRM record identifiers by registration number 
     $recordIdentifiers = $module->findPolicyCrmRecordIdentifiers('ABC/123', 'WX12345', 'TMB123');
     parse_str(parse_url($fake->requests[0]['url'], PHP_URL_QUERY) ?: '', $query);
 
-    assertSameValue(['record_registration', 'record_vin'], $recordIdentifiers);
+    assertSameValue(['record_registration', 'record_vin', 'record_array_wrapped_fields', 'record_type_title'], $recordIdentifiers);
     assertSameValue('ticket.name', $query['filter']['field']);
     assertSameValue('eq', $query['filter']['operator']);
     assertSameValue('ABC/123', $query['filter']['value']);
@@ -273,12 +292,31 @@ test('Daktela module finds vehicle CRM record identifiers by registration number
                         ],
                     ],
                     [
-                        'name' => 'record_vehicle_bad_fields',
+                        'name' => 'record_vehicle_array_wrapped_fields',
                         'title' => 'Pojazdy',
                         'ticket' => ['name' => 'ABC/123'],
                         'customFields' => [
                             'nr_rejestracyjny' => ['WX12345'],
                             'vin' => ['TMB123'],
+                        ],
+                    ],
+                    [
+                        'name' => 'record_vehicle_type_title',
+                        'title' => 'Dowolny tytuł',
+                        'type' => ['title' => 'Pojazdy'],
+                        'ticket' => ['name' => 'ABC/123'],
+                        'customFields' => [
+                            'nr_rejestracyjny' => 'OTHER',
+                            'vin' => 'TMB123',
+                        ],
+                    ],
+                    [
+                        'name' => 'record_vehicle_nested_non_value_field',
+                        'title' => 'Pojazdy',
+                        'ticket' => ['name' => 'ABC/123'],
+                        'customFields' => [
+                            'nr_rejestracyjny' => [['WX12345']],
+                            'vin' => ['value' => 'TMB123'],
                         ],
                     ],
                 ],
@@ -290,7 +328,12 @@ test('Daktela module finds vehicle CRM record identifiers by registration number
     $recordIdentifiers = $module->findVehicleCrmRecordIdentifiers('ABC/123', 'WX12345', 'TMB123');
     parse_str(parse_url($fake->requests[0]['url'], PHP_URL_QUERY) ?: '', $query);
 
-    assertSameValue(['record_vehicle_registration', 'record_vehicle_vin'], $recordIdentifiers);
+    assertSameValue([
+        'record_vehicle_registration',
+        'record_vehicle_vin',
+        'record_vehicle_array_wrapped_fields',
+        'record_vehicle_type_title',
+    ], $recordIdentifiers);
     assertSameValue('ticket.name', $query['filter']['field']);
     assertSameValue('eq', $query['filter']['operator']);
     assertSameValue('ABC/123', $query['filter']['value']);
