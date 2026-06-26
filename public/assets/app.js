@@ -67,17 +67,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const retryButton = form.querySelector('button[name="confirmation"][value="no"]');
         const systemValueButtons = Array.from(form.querySelectorAll('.policy-apply-system-value'));
 
-        const formatGrossValueFromNet = (value) => {
+        const parseVehicleValueAmount = (value) => {
             const trimmedValue = value.trim();
 
             if (trimmedValue === '') {
-                return '';
+                return null;
             }
 
             const matchedAmount = trimmedValue.match(/[-+]?\d(?:[\d\s.,\u00a0]*\d)?/u);
 
             if (matchedAmount === null) {
-                return '';
+                return null;
             }
 
             let amount = matchedAmount[0].replace(/[\s\u00a0]+/gu, '');
@@ -103,35 +103,64 @@ document.addEventListener('DOMContentLoaded', () => {
             const parsedAmount = Number(amount);
 
             if (!Number.isFinite(parsedAmount)) {
-                return '';
+                return null;
             }
 
-            const gross = Math.round(parsedAmount * 1.23 * 100) / 100;
-            const fractionDigits = Math.round(gross * 100) % 100 === 0 ? 0 : 2;
-            const formattedGross = gross.toLocaleString('pl-PL', {
+            return parsedAmount;
+        };
+
+        const formatVehicleValue = (value, sourceValue) => {
+            const roundedValue = Math.round(value * 100) / 100;
+            const fractionDigits = Math.round(roundedValue * 100) % 100 === 0 ? 0 : 2;
+            const formattedValue = roundedValue.toLocaleString('pl-PL', {
                 minimumFractionDigits: fractionDigits,
                 maximumFractionDigits: fractionDigits,
             });
 
-            return formattedGross + (/(?:PLN|zł)/iu.test(trimmedValue) ? ' PLN' : '');
+            return formattedValue + (/(?:PLN|zł)/iu.test(sourceValue.trim()) ? ' PLN' : '');
         };
 
-        form.querySelectorAll('[data-policy-net-gross-value]').forEach((description) => {
-            const field = description.closest('.policy-field');
-            const input = field === null ? null : field.querySelector('.policy-input');
-            const value = description.querySelector('span');
+        const formatGrossValueFromNet = (value) => {
+            const parsedAmount = parseVehicleValueAmount(value);
 
-            if (input === null || value === null) {
-                return;
+            if (parsedAmount === null) {
+                return '';
             }
 
-            const syncGrossValue = () => {
-                value.textContent = formatGrossValueFromNet(input.value);
-            };
+            return formatVehicleValue(parsedAmount * 1.23, value);
+        };
 
-            input.addEventListener('input', syncGrossValue);
-            syncGrossValue();
-        });
+        const formatNetValueFromGross = (value) => {
+            const parsedAmount = parseVehicleValueAmount(value);
+
+            if (parsedAmount === null) {
+                return '';
+            }
+
+            return formatVehicleValue(parsedAmount / 1.23, value);
+        };
+
+        const syncCalculatedVehicleValueDescriptions = (selector, formatter) => {
+            form.querySelectorAll(selector).forEach((description) => {
+                const field = description.closest('.policy-field');
+                const input = field === null ? null : field.querySelector('.policy-input');
+                const value = description.querySelector('span');
+
+                if (input === null || value === null) {
+                    return;
+                }
+
+                const syncCalculatedValue = () => {
+                    value.textContent = formatter(input.value);
+                };
+
+                input.addEventListener('input', syncCalculatedValue);
+                syncCalculatedValue();
+            });
+        };
+
+        syncCalculatedVehicleValueDescriptions('[data-policy-gross-net-value]', formatNetValueFromGross);
+        syncCalculatedVehicleValueDescriptions('[data-policy-net-gross-value]', formatGrossValueFromNet);
 
         const sync = () => {
             const allLocked = locks.length > 0 && locks.every((checkbox) => checkbox.checked);

@@ -53,21 +53,21 @@ $selectedAttachmentTitle = is_array($selectedAttachment)
     ? (string) ($selectedAttachment['title'] ?? basename($selectedAttachment['file']))
     : null;
 
-$vehicleGrossValueFromNet = static function (?string $value): string {
+$vehicleValueAmount = static function (string $value): ?float {
     $value = trim((string) $value);
 
     if ($value === '') {
-        return '';
+        return null;
     }
 
     if (!preg_match('/[-+]?\d(?:[\d\s.,\x{00A0}]*\d)?/u', $value, $matches)) {
-        return '';
+        return null;
     }
 
     $amount = preg_replace('/[\s\x{00A0}]+/u', '', $matches[0]);
 
     if (!is_string($amount) || $amount === '') {
-        return '';
+        return null;
     }
 
     $commaPosition = strrpos($amount, ',');
@@ -91,13 +91,39 @@ $vehicleGrossValueFromNet = static function (?string $value): string {
     }
 
     if (!is_numeric($amount)) {
+        return null;
+    }
+
+    return (float) $amount;
+};
+
+$formattedVehicleValue = static function (float $value, string $sourceValue): string {
+    $value = round($value, 2);
+    $formatted = number_format($value, ((int) round($value * 100)) % 100 === 0 ? 0 : 2, ',', ' ');
+
+    return $formatted . (preg_match('/(?:PLN|zł)/iu', $sourceValue) ? ' PLN' : '');
+};
+
+$vehicleGrossValueFromNet = static function (?string $value) use ($vehicleValueAmount, $formattedVehicleValue): string {
+    $value = trim((string) $value);
+    $amount = $vehicleValueAmount($value);
+
+    if ($amount === null) {
         return '';
     }
 
-    $gross = round(((float) $amount) * 1.23, 2);
-    $formatted = number_format($gross, ((int) round($gross * 100)) % 100 === 0 ? 0 : 2, ',', ' ');
+    return $formattedVehicleValue($amount * 1.23, $value);
+};
 
-    return $formatted . (preg_match('/(?:PLN|zł)/iu', $value) ? ' PLN' : '');
+$vehicleNetValueFromGross = static function (?string $value) use ($vehicleValueAmount, $formattedVehicleValue): string {
+    $value = trim((string) $value);
+    $amount = $vehicleValueAmount($value);
+
+    if ($amount === null) {
+        return '';
+    }
+
+    return $formattedVehicleValue($amount / 1.23, $value);
 };
 ?>
 
@@ -184,7 +210,13 @@ $vehicleGrossValueFromNet = static function (?string $value): string {
                                         <span>zachowaj</span>
                                     </label>
                                 </div>
-                                <?php if ($key === 'wartosc_pojazdu_netto'): ?>
+                                <?php if ($key === 'wartosc_pojazdu_brutto'): ?>
+                                    <div
+                                        id="<?= htmlspecialchars($descriptionId, ENT_QUOTES, 'UTF-8') ?>"
+                                        class="field-description policy-gross-net-value"
+                                        data-policy-gross-net-value
+                                    >/ 1,23 = <span><?= htmlspecialchars($vehicleNetValueFromGross($row['value'] ?? null), ENT_QUOTES, 'UTF-8') ?></span></div>
+                                <?php elseif ($key === 'wartosc_pojazdu_netto'): ?>
                                     <div
                                         id="<?= htmlspecialchars($descriptionId, ENT_QUOTES, 'UTF-8') ?>"
                                         class="field-description policy-net-gross-value"
@@ -197,7 +229,7 @@ $vehicleGrossValueFromNet = static function (?string $value): string {
                                     type="text"
                                     name="policy_data[<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>]"
                                     value="<?= htmlspecialchars((string) ($row['value'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                    <?= $key === 'wartosc_pojazdu_netto' ? 'aria-describedby="' . htmlspecialchars($descriptionId, ENT_QUOTES, 'UTF-8') . '"' : '' ?>
+                                    <?= in_array($key, ['wartosc_pojazdu_brutto', 'wartosc_pojazdu_netto'], true) ? 'aria-describedby="' . htmlspecialchars($descriptionId, ENT_QUOTES, 'UTF-8') . '"' : '' ?>
                                     <?= $locked ? 'readonly' : '' ?>
                                 >
                                 <?php if ($ticketValue !== null): ?>
