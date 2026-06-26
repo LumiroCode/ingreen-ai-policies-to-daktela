@@ -2,11 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Ingreen\DaktelaPolicy\Daktela;
+namespace Ingreen\DaktelaPolicy\DaktelaCommunication\Services;
 
 use Ingreen\DaktelaPolicy\Support\AppException;
 
-final class DaktelaClient
+/**
+ * @internal
+ */
+final class DaktelaCommunicationService
 {
     /**
      * @param null|callable(string, string, array<string, string>, ?string): array{status:int,headers:array<string,string>,body:string} $requester
@@ -24,21 +27,11 @@ final class DaktelaClient
      */
     public function getJson(string $path, array $query = []): array
     {
-        $url = $this->buildUrl($path, $query);
-        $response = $this->request('GET', $url, $this->authHeaders(['Accept' => 'application/json']));
+        $response = $this->request('GET', $this->buildUrl($path, $query), $this->authHeaders([
+            'Accept' => 'application/json',
+        ]));
 
-        if ($response['status'] === 401 || $response['status'] === 403) {
-            throw new AppException(502, 'daktela_auth_failed', 'Daktela rejected API authentication.', [
-                'statusCode' => $response['status'],
-            ]);
-        }
-
-        if ($response['status'] < 200 || $response['status'] >= 300) {
-            throw new AppException(502, 'daktela_request_failed', 'Daktela API request failed.', [
-                'statusCode' => $response['status'],
-                'path' => $path,
-            ]);
-        }
+        $this->assertSuccessfulResponse($response, $path, 'daktela_request_failed');
 
         $payload = json_decode($response['body'], true);
 
@@ -57,19 +50,11 @@ final class DaktelaClient
     public function download(string $file, int $maxBytes): array
     {
         $url = $this->isAbsoluteUrl($file) ? $file : $this->buildUrl($file);
-        $response = $this->request('GET', $url, $this->authHeaders(['Accept' => 'application/pdf,*/*']));
+        $response = $this->request('GET', $url, $this->authHeaders([
+            'Accept' => 'application/pdf,*/*',
+        ]));
 
-        if ($response['status'] === 401 || $response['status'] === 403) {
-            throw new AppException(502, 'daktela_auth_failed', 'Daktela rejected API authentication.', [
-                'statusCode' => $response['status'],
-            ]);
-        }
-
-        if ($response['status'] < 200 || $response['status'] >= 300) {
-            throw new AppException(502, 'attachment_download_failed', 'Attachment download failed.', [
-                'statusCode' => $response['status'],
-            ]);
-        }
+        $this->assertSuccessfulResponse($response, $file, 'attachment_download_failed');
 
         if (strlen($response['body']) > $maxBytes) {
             throw new AppException(413, 'attachment_too_large', 'Downloaded attachment exceeds configured size limit.', [
@@ -81,6 +66,11 @@ final class DaktelaClient
             'body' => $response['body'],
             'contentType' => $this->header($response['headers'], 'Content-Type'),
         ];
+    }
+
+    public function publicUrl(string $path): string
+    {
+        return $this->buildUrl($path);
     }
 
     /**
@@ -144,6 +134,25 @@ final class DaktelaClient
     }
 
     /**
+     * @param array{status:int,headers:array<string,string>,body:string} $response
+     */
+    private function assertSuccessfulResponse(array $response, string $path, string $errorCode): void
+    {
+        if ($response['status'] === 401 || $response['status'] === 403) {
+            throw new AppException(502, 'daktela_auth_failed', 'Daktela rejected API authentication.', [
+                'statusCode' => $response['status'],
+            ]);
+        }
+
+        if ($response['status'] < 200 || $response['status'] >= 300) {
+            throw new AppException(502, $errorCode, 'Daktela API request failed.', [
+                'statusCode' => $response['status'],
+                'path' => $path,
+            ]);
+        }
+    }
+
+    /**
      * @param array<string, string> $headers
      */
     private function header(array $headers, string $name): ?string
@@ -162,7 +171,7 @@ final class DaktelaClient
      */
     private function buildUrl(string $path, array $query = []): string
     {
-        $url = str_starts_with($path, 'http://') || str_starts_with($path, 'https://')
+        $url = $this->isAbsoluteUrl($path)
             ? $path
             : rtrim($this->baseUrl, '/') . '/' . ltrim($path, '/');
 
@@ -182,8 +191,8 @@ final class DaktelaClient
         return $headers + ['X-AUTH-TOKEN-OPENAPI' => $this->apiToken];
     }
 
-    private function isAbsoluteUrl(string $file): bool
+    private function isAbsoluteUrl(string $url): bool
     {
-        return str_starts_with($file, 'http://') || str_starts_with($file, 'https://');
+        return str_starts_with($url, 'http://') || str_starts_with($url, 'https://');
     }
 }

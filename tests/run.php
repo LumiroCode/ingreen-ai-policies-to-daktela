@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 use Ingreen\DaktelaPolicy\Config\AppConfig;
-use Ingreen\DaktelaPolicy\Daktela\DaktelaClient;
+use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaModule;
+use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaTabSignatureVerifier;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\Logging\DailyLogPaths;
 use Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData;
@@ -181,9 +182,14 @@ function app(FakeDaktela $fake, string $dir, ?string $allowedUtilityOrigin = nul
     $config = new AppConfig('https://daktela.example', 'api-token', null, $dir . '/var', $dir . '/cache', 1_000_000, $allowedUtilityOrigin, $utilitySecretKey);
 
     $logger = new NullLogger();
-    $daktela = new DaktelaClient($config->daktelaBaseUrl, $config->daktelaApiToken, $fake);
+    $daktela = new DaktelaModule($config->daktelaBaseUrl, $config->daktelaApiToken, $fake, $logger);
 
-    return new WebhookApp($config, $daktela, new TicketPdfAttachments($daktela, $logger, $config->cacheDir), $extractor ?? new FakePolicyDataExtractor(), $logger);
+    return new WebhookApp($config, tabSignatureVerifier(), new TicketPdfAttachments($daktela, $logger, $config->cacheDir), $extractor ?? new FakePolicyDataExtractor(), $logger);
+}
+
+function tabSignatureVerifier(): DaktelaTabSignatureVerifier
+{
+    return new DaktelaTabSignatureVerifier();
 }
 
 function accessTokenFromHtml(string $html): string
@@ -239,10 +245,10 @@ function daktelaTabParams(string $ticketId, int $secondOffset = 0): array
         ->modify(($secondOffset >= 0 ? '+' : '') . $secondOffset . ' seconds')
         ->format('U');
     $config = new AppConfig('https://daktela.example', 'api-token', null, sys_get_temp_dir(), sys_get_temp_dir());
-    $sig = (new WebhookAccessGuard($config))->makeDaktelaTabSig($dt, $ticketId);
+    $sig = (new WebhookAccessGuard($config, tabSignatureVerifier()))->makeUtilityTabSig($dt, $ticketId);
 
     if ($sig === null) {
-        throw new RuntimeException('Could not create Daktela tab signature.');
+        throw new RuntimeException('Could not create Utility tab signature.');
     }
 
     return ['dt' => $dt, 'sig' => $sig];
@@ -252,7 +258,7 @@ function daktelaAccessToken(string $ticketId): string
 {
     $config = new AppConfig('https://daktela.example', 'api-token', null, sys_get_temp_dir(), sys_get_temp_dir());
 
-    return (new WebhookAccessGuard($config))->accessTokenForTicket($ticketId);
+    return (new WebhookAccessGuard($config, tabSignatureVerifier()))->accessTokenForTicket($ticketId);
 }
 
 /**
@@ -298,7 +304,7 @@ test('app rejects empty ticket query parameter', function (): void {
     assertArrayMissingKey('details', $payload['error']);
 });
 
-test('app rejects ticket requests without Daktela tab signature', function (): void {
+test('app rejects ticket requests without Utility tab signature', function (): void {
     $response = app(new FakeDaktela([]), tempDir())->handle('123', null);
     $payload = errorBody($response);
 
@@ -307,17 +313,17 @@ test('app rejects ticket requests without Daktela tab signature', function (): v
     assertArrayMissingKey('details', $payload['error']);
 });
 
-test('Daktela tab signature matches helper formula with seconds', function (): void {
+test('Utility tab signature matches helper formula with seconds', function (): void {
     $config = new AppConfig('https://daktela.example', 'api-token', null, tempDir() . '/var', tempDir() . '/cache');
-    $guard = new WebhookAccessGuard($config);
+    $guard = new WebhookAccessGuard($config, tabSignatureVerifier());
 
-    assertSameValue('89666-30820-47545', $guard->makeDaktelaTabSig('1782315045', '123'));
+    assertSameValue('89666-30820-47545', $guard->makeUtilityTabSig('1782315045', '123'));
 });
 
 test('access guard logs denied attempts with diagnostic reasons', function (): void {
     $logger = new NullLogger();
     $config = new AppConfig('https://daktela.example', 'api-token', null, tempDir() . '/var', tempDir() . '/cache', 1_000_000, 'https://ingreen.daktela.com');
-    $guard = new WebhookAccessGuard($config, $logger);
+    $guard = new WebhookAccessGuard($config, tabSignatureVerifier(), $logger);
     $tab = daktelaTabParams('123');
 
     try {
@@ -334,17 +340,17 @@ test('access guard logs denied attempts with diagnostic reasons', function (): v
     }
 
     assertSameValue(1, count($logger->warnings));
-    assertSameValue('Daktela tab access denied.', $logger->warnings[0]['message']);
+    assertSameValue('Utility tab access denied.', $logger->warnings[0]['message']);
 
     $context = $logger->warnings[0]['context'];
     assertSameValue('123', $context['ticket']);
     assertSameValue('https://ingreen.daktela.com', $context['allowedOrigin']);
     assertTrueValue(in_array('missing_access_token', $context['denialReasons']['accessToken'], true));
-    assertTrueValue(in_array('sig_mismatch', $context['denialReasons']['daktelaTabSignature'], true));
-    assertTrueValue(in_array('referrer_not_allowed', $context['denialReasons']['daktelaTabSignature'], true));
-    assertSameValue($tab['dt'], $context['attempt']['daktelaTabSignature']['dt']);
-    assertSameValue(true, $context['attempt']['daktelaTabSignature']['sigPresent']);
-    assertTrueValue(is_string($context['attempt']['daktelaTabSignature']['sigFingerprint']));
+    assertTrueValue(in_array('sig_mismatch', $context['denialReasons']['tabSignature'], true));
+    assertTrueValue(in_array('referrer_not_allowed', $context['denialReasons']['tabSignature'], true));
+    assertSameValue($tab['dt'], $context['attempt']['tabSignature']['dt']);
+    assertSameValue(true, $context['attempt']['tabSignature']['sigPresent']);
+    assertTrueValue(is_string($context['attempt']['tabSignature']['sigFingerprint']));
 });
 
 test('ticket without attachments returns 404', function (): void {
@@ -458,7 +464,7 @@ test('stale ticket PDF attachment cache is refreshed after one day', function ()
     $app = app($fake, $dir);
 
     $first = signedEntryRequest($app, '123');
-    $cacheFiles = glob($dir . '/cache/daktela-ticket-attachments/*.json') ?: [];
+    $cacheFiles = glob($dir . '/cache/ticket-attachments/*.json') ?: [];
 
     assertSameValue(200, $first['status']);
     assertSameValue(1, count($cacheFiles));
@@ -743,7 +749,7 @@ test('configured utility origin allows Daktela referrer and sets frame policy', 
     assertTrueValue(str_contains($response['body'], 'name="access_token"'));
 });
 
-test('configured utility origin rejects missing Daktela tab signature', function (): void {
+test('configured utility origin rejects missing Utility tab signature', function (): void {
     $response = app(new FakeDaktela([]), tempDir(), 'https://ingreen.daktela.com')
         ->handle('123', null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders());
     $payload = errorBody($response);
@@ -753,7 +759,7 @@ test('configured utility origin rejects missing Daktela tab signature', function
     assertArrayMissingKey('details', $payload['error']);
 });
 
-test('configured utility origin allows Daktela tab timestamp within skew', function (): void {
+test('configured utility origin allows Utility tab timestamp within skew', function (): void {
     $tab = daktelaTabParams('123', -2);
     $fake = new FakeDaktela([
         '/api/v6/tickets/123' => jsonResponse([
@@ -774,7 +780,7 @@ test('configured utility origin allows Daktela tab timestamp within skew', funct
     assertSameValue(200, $response['status']);
 });
 
-test('configured utility origin rejects stale Daktela tab timestamp', function (): void {
+test('configured utility origin rejects stale Utility tab timestamp', function (): void {
     $tab = daktelaTabParams('123', -6);
     $response = app(new FakeDaktela([]), tempDir(), 'https://ingreen.daktela.com')
         ->handle('123', null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders(), $tab['dt'], $tab['sig']);
@@ -784,7 +790,7 @@ test('configured utility origin rejects stale Daktela tab timestamp', function (
     assertSameValue('forbidden_utility_access', $payload['error']['code']);
 });
 
-test('configured utility origin rejects wrong Daktela tab signature', function (): void {
+test('configured utility origin rejects wrong Utility tab signature', function (): void {
     $tab = daktelaTabParams('123');
     $response = app(new FakeDaktela([]), tempDir(), 'https://ingreen.daktela.com')
         ->handle('123', null, null, 'https://ingreen.daktela.com/tickets/123', daktelaFrameHeaders(), $tab['dt'], '00000-00000-00000');
@@ -1049,7 +1055,7 @@ test('policy reread after incorrectness claim ignores pending cache', function (
     assertTrueValue(str_contains($reread['body'], 'Dane polisy zostały odczytane przez AI.'));
 });
 
-test('configured utility key still requires Daktela tab signature', function (): void {
+test('configured utility key still requires Utility tab signature', function (): void {
     $tab = daktelaTabParams('123');
     $fake = new FakeDaktela([
         '/api/v6/tickets/123' => jsonResponse([
@@ -1073,12 +1079,147 @@ test('configured utility key still requires Daktela tab signature', function ():
 
 test('downloader handles relative Daktela file path', function (): void {
     $fake = new FakeDaktela(['/attachments/policy.pdf' => pdfResponse()]);
-    $client = new DaktelaClient('https://daktela.example', 'token', $fake);
+    $client = new DaktelaModule('https://daktela.example', 'token', $fake);
     $file = $client->download('/attachments/policy.pdf', 1_000_000);
 
     assertSameValue("%PDF-1.4\nbody", $file['body']);
     assertSameValue('https://daktela.example/attachments/policy.pdf', $fake->requests[0]['url']);
     assertSameValue('token', $fake->requests[0]['headers']['X-AUTH-TOKEN-OPENAPI']);
+});
+
+test('Daktela module gets ticket by name through its facade', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse(['result' => ['name' => '123']]),
+    ]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    $ticket = $module->getTicketByName('123');
+
+    assertSameValue('123', $ticket['result']['name']);
+    assertSameValue('GET', $fake->requests[0]['method']);
+    assertSameValue('https://daktela.example/api/v6/tickets/123', $fake->requests[0]['url']);
+    assertSameValue('application/json', $fake->requests[0]['headers']['Accept']);
+    assertSameValue('module-token', $fake->requests[0]['headers']['X-AUTH-TOKEN-OPENAPI']);
+});
+
+test('Daktela module URL-encodes ticket name', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/ABC%2F123' => jsonResponse(['result' => ['name' => 'ABC/123']]),
+    ]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    $ticket = $module->getTicketByName('ABC/123');
+
+    assertSameValue('ABC/123', $ticket['result']['name']);
+    assertSameValue('https://daktela.example/api/v6/tickets/ABC%2F123', $fake->requests[0]['url']);
+});
+
+test('Daktela module gets normalized ticket PDF attachments', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/ABC%2F123' => jsonResponse([
+            'result' => [
+                'name' => 'ABC/123',
+                'title' => 'Policy ticket',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/ticket.pdf', 'title' => 'ticket.pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/ABC%2F123/activities' => jsonResponse([
+            'result' => [
+                'data' => [
+                    [
+                        'name' => 'activity-1',
+                        'attachments' => [
+                            ['file' => '/files/activity.pdf', 'title' => 'activity.pdf'],
+                        ],
+                        'item' => [
+                            'attachments' => [
+                                ['file' => '/files/item.pdf', 'title' => 'item.pdf'],
+                            ],
+                            'inlineAttachments' => [
+                                ['file' => '/files/inline.pdf', 'title' => 'inline.pdf'],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    $attachments = $module->getTicketPdfAttachments('ABC/123');
+    parse_str(parse_url($fake->requests[1]['url'], PHP_URL_QUERY) ?: '', $activityQuery);
+
+    assertSameValue('Policy ticket', $attachments['title']);
+    assertSameValue(true, $attachments['hasAttachment']);
+    assertSameValue('https://daktela.example/api/v6/tickets/ABC%2F123', $fake->requests[0]['url']);
+    assertSameValue('https://daktela.example/api/v6/tickets/ABC%2F123/activities?pageSize=100&sort%5B0%5D%5Bfield%5D=time&sort%5B0%5D%5Bdir%5D=desc', $fake->requests[1]['url']);
+    assertSameValue('100', $activityQuery['pageSize']);
+    assertSameValue('time', $activityQuery['sort'][0]['field']);
+    assertSameValue('desc', $activityQuery['sort'][0]['dir']);
+    assertSameValue(['ticket', 'activity.attachments', 'activity.item.attachments', 'activity.item.inlineAttachments'], array_map(
+        static fn (array $candidate): string => $candidate['source'],
+        $attachments['attachments']
+    ));
+    assertSameValue('ticket.pdf', $attachments['attachments'][0]['title']);
+    assertSameValue('/files/ticket.pdf', $attachments['attachments'][0]['file']);
+    assertSameValue('https://daktela.example/files/ticket.pdf?download=0', $attachments['attachments'][0]['previewUrl']);
+    assertSameValue('activity.pdf', $attachments['attachments'][1]['title']);
+});
+
+test('Daktela module maps auth failure to AppException', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([], 401),
+    ]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    try {
+        $module->getTicketByName('123');
+    } catch (AppException $exception) {
+        assertSameValue(502, $exception->statusCode());
+        assertSameValue('daktela_auth_failed', $exception->errorCode());
+        return;
+    }
+
+    throw new RuntimeException('Expected exception.');
+});
+
+test('Daktela module maps non-success response to AppException', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([], 500),
+    ]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    try {
+        $module->getTicketByName('123');
+    } catch (AppException $exception) {
+        assertSameValue(502, $exception->statusCode());
+        assertSameValue('daktela_request_failed', $exception->errorCode());
+        assertSameValue('/api/v6/tickets/123', $exception->details()['path']);
+        return;
+    }
+
+    throw new RuntimeException('Expected exception.');
+});
+
+test('Daktela module rejects invalid JSON response', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => ['status' => 200, 'headers' => ['Content-Type' => 'application/json'], 'body' => '{invalid'],
+    ]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    try {
+        $module->getTicketByName('123');
+    } catch (AppException $exception) {
+        assertSameValue(502, $exception->statusCode());
+        assertSameValue('invalid_daktela_response', $exception->errorCode());
+        assertSameValue('/api/v6/tickets/123', $exception->details()['path']);
+        return;
+    }
+
+    throw new RuntimeException('Expected exception.');
 });
 
 test('daktela 401 maps to upstream auth error', function (): void {
@@ -1198,7 +1339,7 @@ test('selected PDF attachment storage error renders message under table', functi
     assertSameValue(502, $response['status']);
     assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
     assertTrueValue(str_contains($response['body'], 'not-pdf.pdf'));
-    assertTrueValue(str_contains($response['body'], 'Nie udało się pobrać pliku polisy z Dakteli.'));
+    assertTrueValue(str_contains($response['body'], 'Nie udało się pobrać pliku polisy z systemu źródłowego.'));
 });
 
 test('selected PDF attachment extraction error renders message under table', function (): void {

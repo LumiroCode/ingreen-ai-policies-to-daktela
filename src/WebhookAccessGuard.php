@@ -11,10 +11,10 @@ use Ingreen\DaktelaPolicy\Support\AppException;
 final class WebhookAccessGuard
 {
     private const ACCESS_TOKEN_TTL_SECONDS = 900;
-    private const DAKTELA_TAB_ALLOWED_SKEW_SECONDS = 5;
 
     public function __construct(
         private readonly AppConfig $config,
+        private readonly UtilityTabSignatureVerifier $tabSignatureVerifier,
         private readonly ?AppLogger $logger = null
     ) {
     }
@@ -27,8 +27,8 @@ final class WebhookAccessGuard
         ?string $accessToken,
         ?string $referrer,
         array $requestHeaders = [],
-        ?string $daktelaTabDt = null,
-        ?string $daktelaTabSig = null
+        ?string $tabDt = null,
+        ?string $tabSig = null
     ): void
     {
         $accessTokenAttempt = $this->accessTokenAttemptDiagnostics($ticketId, $accessToken);
@@ -37,38 +37,23 @@ final class WebhookAccessGuard
             return;
         }
 
-        $entryAttempt = $this->entryRequestAttemptDiagnostics($ticketId, $daktelaTabDt, $daktelaTabSig, $referrer, $requestHeaders);
+        $entryAttempt = $this->entryRequestAttemptDiagnostics($ticketId, $tabDt, $tabSig, $referrer, $requestHeaders);
 
         if ($entryAttempt['valid'] === true) {
             return;
         }
 
-        $this->logDeniedAccess($ticketId, $accessToken, $accessTokenAttempt, $entryAttempt, $referrer, $requestHeaders, $daktelaTabDt, $daktelaTabSig);
+        $this->logDeniedAccess($ticketId, $accessToken, $accessTokenAttempt, $entryAttempt, $referrer, $requestHeaders, $tabDt, $tabSig);
 
         throw new AppException(403, 'forbidden_utility_access', 'Access denied.', [
             'allowedOrigin' => $this->config->allowedUtilityOrigin,
-            'requiresDaktelaTabSignature' => true,
+            'requiresUtilityTabSignature' => true,
         ]);
     }
 
-    public function makeDaktelaTabSig(string $dt, string $ticket): ?string
+    public function makeUtilityTabSig(string $dt, string $ticket): ?string
     {
-        if (!$this->isValidDaktelaTabDt($dt)) {
-            return null;
-        }
-
-        if (!preg_match('/^\d+$/', $ticket)) {
-            return null;
-        }
-
-        $t = (int) $dt;
-        $n = (int) $ticket;
-
-        $p1 = 10000 + (((($n + 6123) * ($t + 5659)) + 2482) % 90000);
-        $p2 = 10000 + (((($n + 5994) * ($t + 3437)) + 6426) % 90000);
-        $p3 = 10000 + (((($n + 9154) ** 2) + (($t + 5083) * 4022)) % 90000);
-
-        return sprintf('%d-%d-%d', $p1, $p2, $p3);
+        return $this->tabSignatureVerifier->makeTabSignature($dt, $ticket);
     }
 
     public function accessTokenForTicket(string $ticketId): string
@@ -102,13 +87,13 @@ final class WebhookAccessGuard
      */
     private function isValidEntryRequest(
         string $ticketId,
-        ?string $daktelaTabDt,
-        ?string $daktelaTabSig,
+        ?string $tabDt,
+        ?string $tabSig,
         ?string $referrer,
         array $requestHeaders
     ): bool
     {
-        if (!$this->isValidDaktelaTabRequest($ticketId, $daktelaTabDt, $daktelaTabSig)) {
+        if (!$this->isValidTabRequest($ticketId, $tabDt, $tabSig)) {
             return false;
         }
 
@@ -128,16 +113,16 @@ final class WebhookAccessGuard
      */
     private function entryRequestAttemptDiagnostics(
         string $ticketId,
-        ?string $daktelaTabDt,
-        ?string $daktelaTabSig,
+        ?string $tabDt,
+        ?string $tabSig,
         ?string $referrer,
         array $requestHeaders
     ): array
     {
         $reasons = [];
         $checks = [
-            'dtPresent' => $daktelaTabDt !== null,
-            'sigPresent' => $daktelaTabSig !== null,
+            'dtPresent' => $tabDt !== null,
+            'sigPresent' => $tabSig !== null,
             'dtFormatValid' => false,
             'sigMatches' => false,
             'dtFresh' => false,
@@ -147,29 +132,29 @@ final class WebhookAccessGuard
             'frameNavigationHeadersValid' => $this->config->allowedUtilityOrigin === null,
         ];
 
-        if ($daktelaTabDt === null) {
+        if ($tabDt === null) {
             $reasons[] = 'missing_dt';
         } else {
-            $checks['dtFormatValid'] = $this->isValidDaktelaTabDt($daktelaTabDt);
+            $checks['dtFormatValid'] = $this->tabSignatureVerifier->isValidTabTimestamp($tabDt);
 
             if ($checks['dtFormatValid'] !== true) {
                 $reasons[] = 'invalid_dt_format';
             }
         }
 
-        if ($daktelaTabSig === null) {
+        if ($tabSig === null) {
             $reasons[] = 'missing_sig';
         }
 
-        if ($checks['dtFormatValid'] === true && $daktelaTabSig !== null) {
-            $expected = $this->makeDaktelaTabSig((string) $daktelaTabDt, $ticketId);
-            $checks['sigMatches'] = $expected !== null && hash_equals($expected, $daktelaTabSig);
+        if ($checks['dtFormatValid'] === true && $tabSig !== null) {
+            $expected = $this->makeUtilityTabSig((string) $tabDt, $ticketId);
+            $checks['sigMatches'] = $expected !== null && hash_equals($expected, $tabSig);
 
             if ($checks['sigMatches'] !== true) {
                 $reasons[] = 'sig_mismatch';
             }
 
-            $checks['dtFresh'] = $this->isFreshDaktelaTabDt((string) $daktelaTabDt);
+            $checks['dtFresh'] = $this->tabSignatureVerifier->isFreshTabTimestamp((string) $tabDt);
 
             if ($checks['dtFresh'] !== true) {
                 $reasons[] = 'stale_dt';
@@ -228,17 +213,17 @@ final class WebhookAccessGuard
         return null;
     }
 
-    private function isValidDaktelaTabRequest(string $ticketId, ?string $dt, ?string $sig): bool
+    private function isValidTabRequest(string $ticketId, ?string $dt, ?string $sig): bool
     {
         if ($dt === null || $sig === null) {
             return false;
         }
 
-        $expected = $this->makeDaktelaTabSig($dt, $ticketId);
+        $expected = $this->makeUtilityTabSig($dt, $ticketId);
 
         return $expected !== null
             && hash_equals($expected, $sig)
-            && $this->isFreshDaktelaTabDt($dt);
+            && $this->tabSignatureVerifier->isFreshTabTimestamp($dt);
     }
 
     /**
@@ -330,8 +315,8 @@ final class WebhookAccessGuard
         array $entryAttempt,
         ?string $referrer,
         array $requestHeaders,
-        ?string $daktelaTabDt,
-        ?string $daktelaTabSig
+        ?string $tabDt,
+        ?string $tabSig
     ): void
     {
         $context = [
@@ -344,10 +329,10 @@ final class WebhookAccessGuard
                     'reasons' => $accessTokenAttempt['reasons'],
                     'checks' => $accessTokenAttempt['checks'],
                 ],
-                'daktelaTabSignature' => [
-                    'dt' => $daktelaTabDt,
-                    'sigPresent' => $daktelaTabSig !== null,
-                    'sigFingerprint' => $this->fingerprintNullable($daktelaTabSig),
+                'tabSignature' => [
+                    'dt' => $tabDt,
+                    'sigPresent' => $tabSig !== null,
+                    'sigFingerprint' => $this->fingerprintNullable($tabSig),
                     'reasons' => $entryAttempt['reasons'],
                     'checks' => $entryAttempt['checks'],
                 ],
@@ -356,19 +341,19 @@ final class WebhookAccessGuard
             ],
             'denialReasons' => [
                 'accessToken' => $accessTokenAttempt['reasons'],
-                'daktelaTabSignature' => $entryAttempt['reasons'],
+                'tabSignature' => $entryAttempt['reasons'],
             ],
         ];
 
         if ($this->logger !== null) {
-            $this->logger->warning('Daktela tab access denied.', $context);
+            $this->logger->warning('Utility tab access denied.', $context);
             return;
         }
 
         error_log(json_encode([
             'time' => gmdate('c'),
             'level' => 'warning',
-            'message' => 'Daktela tab access denied.',
+            'message' => 'Utility tab access denied.',
             'context' => $context,
         ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
     }
@@ -394,27 +379,6 @@ final class WebhookAccessGuard
         }
 
         return substr(hash('sha256', $value), 0, 16);
-    }
-
-    private function isFreshDaktelaTabDt(string $dt): bool
-    {
-        if (!$this->isValidDaktelaTabDt($dt)) {
-            return false;
-        }
-
-        $age = abs(time() - (int) $dt);
-
-        return $age <= self::DAKTELA_TAB_ALLOWED_SKEW_SECONDS;
-    }
-
-    private function isValidDaktelaTabDt(string $dt): bool
-    {
-        if (!preg_match('/^\d{10,}$/', $dt)) {
-            return false;
-        }
-
-        return strlen($dt) < strlen((string) PHP_INT_MAX)
-            || (strlen($dt) === strlen((string) PHP_INT_MAX) && strcmp($dt, (string) PHP_INT_MAX) <= 0);
     }
 
     private function isAllowedReferrer(string $referrer): bool
@@ -463,7 +427,7 @@ final class WebhookAccessGuard
 
     private function accessTokenSignature(string $payload): string
     {
-        return hash_hmac('sha256', $payload, $this->config->daktelaApiToken);
+        return hash_hmac('sha256', $payload, $this->config->utilitySecretKey ?? $this->config->daktelaApiToken);
     }
 
     private function base64UrlEncode(string $value): string

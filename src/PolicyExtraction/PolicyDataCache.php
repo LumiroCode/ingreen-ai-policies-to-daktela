@@ -13,7 +13,7 @@ final class PolicyDataCache
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
      */
     public function confirmed(string $ticketId, array $attachment): ?ExtractedPolicyData
     {
@@ -21,7 +21,7 @@ final class PolicyDataCache
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
      */
     public function pending(string $ticketId, array $attachment): ?ExtractedPolicyData
     {
@@ -29,7 +29,7 @@ final class PolicyDataCache
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
      */
     public function savePending(string $ticketId, array $attachment, ExtractedPolicyData $data): void
     {
@@ -37,7 +37,7 @@ final class PolicyDataCache
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
      */
     public function saveConfirmed(string $ticketId, array $attachment, ExtractedPolicyData $data): void
     {
@@ -45,7 +45,7 @@ final class PolicyDataCache
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
      */
     public function deletePending(string $ticketId, array $attachment): void
     {
@@ -107,7 +107,7 @@ final class PolicyDataCache
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
      */
     private function path(string $state, string $ticketId, array $attachment): string
     {
@@ -117,7 +117,7 @@ final class PolicyDataCache
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
      */
     private function attachmentIdentifier(array $attachment): string
     {

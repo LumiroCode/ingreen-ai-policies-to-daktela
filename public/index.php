@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 use Ingreen\DaktelaPolicy\Config\AppConfig;
-use Ingreen\DaktelaPolicy\Daktela\DaktelaClient;
+use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaModule;
+use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaTabSignatureVerifier;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\Logging\DailyLogPaths;
 use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\AnthropicClaudeMessagesClient;
@@ -28,10 +29,11 @@ try {
     ini_set('log_errors', '1');
     ini_set('error_log', $dailyLogPaths->errorsFile());
     $logger = new AppLogger($dailyLogPaths->logsFile());
-    $daktela = new DaktelaClient($config->daktelaBaseUrl, $config->daktelaApiToken);
+    $daktela = new DaktelaModule($config->daktelaBaseUrl, $config->daktelaApiToken, logger: $logger);
+    $daktelaTabSignatureVerifier = new DaktelaTabSignatureVerifier();
     $app = new WebhookApp(
         $config,
-        $daktela,
+        $daktelaTabSignatureVerifier,
         new TicketPdfAttachments($daktela, $logger, $config->cacheDir),
         new ClaudePolicyDataExtractor(AnthropicClaudeMessagesClient::fromApiKey($config->claudeApiKey)),
         $logger

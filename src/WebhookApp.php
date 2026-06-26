@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Ingreen\DaktelaPolicy;
 
 use Ingreen\DaktelaPolicy\Config\AppConfig;
-use Ingreen\DaktelaPolicy\Daktela\DaktelaClient;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyConfirmationForm;
@@ -21,12 +20,12 @@ final class WebhookApp
 
     public function __construct(
         private readonly AppConfig $config,
-        private readonly DaktelaClient $daktela,
+        UtilityTabSignatureVerifier $tabSignatureVerifier,
         private readonly TicketPdfAttachments $ticketPdfAttachments,
         private readonly PolicyDataExtractor $policyDataExtractor,
         private readonly AppLogger $logger
     ) {
-        $this->accessGuard = new WebhookAccessGuard($config, $logger);
+        $this->accessGuard = new WebhookAccessGuard($config, $tabSignatureVerifier, $logger);
         $this->policyDataCache = new PolicyDataCache($config->varDir);
     }
 
@@ -42,8 +41,8 @@ final class WebhookApp
         ?string $accessToken = null,
         ?string $referrer = null,
         array $requestHeaders = [],
-        ?string $daktelaTabDt = null,
-        ?string $daktelaTabSig = null,
+        ?string $tabDt = null,
+        ?string $tabSig = null,
         ?string $confirmation = null,
         ?array $policyData = null,
         ?array $policyLocked = null,
@@ -61,8 +60,8 @@ final class WebhookApp
                 $accessToken,
                 $referrer,
                 $requestHeaders,
-                $daktelaTabDt,
-                $daktelaTabSig
+                $tabDt,
+                $tabSig
             );
 
             if ($servePolicyPdf) {
@@ -117,8 +116,8 @@ final class WebhookApp
                     'error' => [
                         'code' => $exception->errorCode(),
                         'message' => $exception->getMessage(),
-                        'dt' => $daktelaTabDt,
-                        'sig' => $daktelaTabSig,
+                        'dt' => $tabDt,
+                        'sig' => $tabSig,
                     ],
                 ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
             ];
@@ -150,7 +149,7 @@ final class WebhookApp
         $path = $this->policyFilePath($attachment, $attachmentIndex);
 
         if (!is_file($path)) {
-            $download = $this->daktela->download($attachment['file'], $this->config->maxDownloadBytes);
+            $download = $this->ticketPdfAttachments->download($attachment, $this->config->maxDownloadBytes);
 
             if (!$this->looksLikePdf($download['body'], $download['contentType'], $attachment)) {
                 throw new AppException(422, 'attachment_is_not_pdf', 'Downloaded attachment does not look like a PDF.', [
@@ -261,7 +260,7 @@ final class WebhookApp
                 }
             }
 
-            $download = $this->daktela->download($attachment['file'], $this->config->maxDownloadBytes);
+            $download = $this->ticketPdfAttachments->download($attachment, $this->config->maxDownloadBytes);
 
             if (!$this->looksLikePdf($download['body'], $download['contentType'], $attachment)) {
                 throw new AppException(422, 'attachment_is_not_pdf', 'Downloaded attachment does not look like a PDF.', [
@@ -411,7 +410,7 @@ final class WebhookApp
     }
 
     /**
-     * @param list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
+     * @param list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null}> $attachments
      */
     private function renderPolicyProcessingErrorPage(
         string $ticketId,
@@ -469,7 +468,7 @@ final class WebhookApp
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
      */
     private function storePolicyFile(array $attachment, string $attachmentIndex, string $body): string
     {
@@ -493,7 +492,7 @@ final class WebhookApp
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
      */
     private function policyFilePath(array $attachment, string $attachmentIndex): string
     {
@@ -501,7 +500,7 @@ final class WebhookApp
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
      */
     private function temporaryPolicyFilename(array $attachment, string $attachmentIndex): string
     {
@@ -526,7 +525,7 @@ final class WebhookApp
         }
 
         return match ($exception->errorCode()) {
-            'attachment_download_failed', 'upstream_http_error', 'daktela_auth_failed' => 'Nie udało się pobrać pliku polisy z Dakteli.',
+            'attachment_download_failed', 'upstream_http_error', 'daktela_auth_failed' => 'Nie udało się pobrać pliku polisy z systemu źródłowego.',
             'attachment_too_large' => 'Plik polisy jest większy niż dozwolony limit.',
             'attachment_is_not_pdf' => 'Wybrany załącznik nie jest poprawnym plikiem PDF.',
             'policy_temp_dir_failed', 'policy_temp_write_failed', 'policy_pdf_not_readable' => 'Nie udało się zapisać pliku polisy do odczytu.',
@@ -574,7 +573,7 @@ final class WebhookApp
     }
 
     /**
-     * @param list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
+     * @param list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null}> $attachments
      */
     private function renderPage(
         string $ticketId,
@@ -587,7 +586,6 @@ final class WebhookApp
     ): string
     {
         $accessToken = $this->accessGuard->accessTokenForTicket($ticketId);
-        $daktelaBaseUrl = $this->config->daktelaBaseUrl;
         $ticketTitle = $this->displayTicketTitle($ticketId, $ticketTitle);
         ob_start();
         require dirname(__DIR__) . '/templates/page.php';
@@ -613,7 +611,7 @@ final class WebhookApp
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
      */
     private function looksLikePdf(string $body, ?string $contentType, array $attachment): bool
     {
@@ -623,7 +621,7 @@ final class WebhookApp
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
      */
     private function hasPdfType(array $attachment): bool
     {
@@ -631,7 +629,7 @@ final class WebhookApp
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
      */
     private function hasPdfExtension(array $attachment): bool
     {
@@ -640,7 +638,7 @@ final class WebhookApp
     }
 
     /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null} $attachment
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
      */
     private function downloadFilename(array $attachment): string
     {

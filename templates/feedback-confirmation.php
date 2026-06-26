@@ -9,7 +9,7 @@ declare(strict_types=1);
  * @var array<string,bool> $selectedLockedFields
  * @var string $ticketId
  * @var string $ticketTitle
- * @var list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,dataModel?:string|null,mapper?:string|null}> $attachments
+ * @var list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null}> $attachments
  */
 
 $policyRows = [];
