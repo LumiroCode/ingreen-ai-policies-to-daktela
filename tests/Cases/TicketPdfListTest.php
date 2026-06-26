@@ -61,7 +61,7 @@ test('ticket PDF list renders table and does not download files', function (): v
     assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
     assertTrueValue(str_contains($response['body'], '<h1 class="ticket-title">ZAMOWFILM Damian Nojek |TM3|RN127614471</h1>'));
     assertTrueValue(str_contains($response['body'], '<p class="ticket-debug">Ticket #123</p>'));
-    assertTrueValue(str_contains($response['body'], 'name="title" value="ZAMOWFILM Damian Nojek |TM3|RN127614471"'));
+    assertTrueValue(!str_contains($response['body'], 'name="title" value="ZAMOWFILM Damian Nojek |TM3|RN127614471"'));
     assertTrueValue(str_contains($response['body'], 'scan.pdf'));
     assertTrueValue(str_contains($response['body'], 'policy.pdf'));
     assertTrueValue(str_contains($response['body'], 'class="attachment-row attachment-read-form'));

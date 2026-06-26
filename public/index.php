@@ -39,7 +39,6 @@ try {
         new ClaudePolicyDataExtractor(AnthropicClaudeMessagesClient::fromApiKey($config->claudeApiKey)),
         $logger,
         new DaktelaTicketPolicyValuesProvider($daktela, $logger),
-        $daktela,
         $daktela
     );
 
@@ -51,10 +50,10 @@ try {
         requestHeaders(),
         queryStringParam('dt'),
         queryStringParam('sig'),
-        queryStringParam('confirmation'),
-        queryArrayParam('policy_data'),
-        queryArrayParam('policy_locked'),
-        queryStringParam('title'),
+        bodyStringParam('confirmation'),
+        bodyArrayParam('policy_data'),
+        bodyArrayParam('policy_locked'),
+        bodyStringParam('title'),
         queryBoolParam('refresh_attachments'),
         queryBoolParam('policy_pdf')
     ));
@@ -90,13 +89,37 @@ function queryBoolParam(string $name): bool
     return is_string($value) && in_array(strtolower($value), ['1', 'true', 'yes'], true);
 }
 
+function bodyStringParam(string $name): ?string
+{
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+        return null;
+    }
+
+    $value = $_POST[$name] ?? null;
+
+    return is_string($value) ? $value : null;
+}
+
 /**
  * @return array<string,string>|null
  */
-function queryArrayParam(string $name): ?array
+function bodyArrayParam(string $name): ?array
 {
-    $value = $_GET[$name] ?? null;
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+        return null;
+    }
 
+    $value = $_POST[$name] ?? null;
+
+    return stringArrayParam($value);
+}
+
+/**
+ * @param mixed $value
+ * @return array<string,string>|null
+ */
+function stringArrayParam(mixed $value): ?array
+{
     if (!is_array($value)) {
         return null;
     }

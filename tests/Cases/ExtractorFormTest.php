@@ -65,10 +65,19 @@ test('policy confirmation form shows ticket custom field value without replacing
     assertTrueValue(str_contains($download['body'], 'data-policy-ai-value="LLM Tesla"'));
     assertTrueValue(str_contains($download['body'], '>AI</button>'));
     assertTrueValue(str_contains($download['body'], '>&times;</button>'));
-    assertTrueValue(str_contains($download['body'], 'name="ticket" value="123"'));
     assertTrueValue(str_contains($download['body'], 'name="title" value="Policy ticket"'));
-    assertTrueValue(str_contains($download['body'], 'name="attachment" value="0"'));
-    assertTrueValue(str_contains($download['body'], 'name="access_token"'));
+    assertTrueValue(
+        preg_match('/<form[^>]*class="policy-review-form panel-content"[^>]*method="post"[^>]*action="\?ticket=123&amp;attachment=0&amp;access_token=[^"]+"[^>]*>/s', $download['body']) === 1,
+        'Expected policy review form to submit personal data via POST while keeping routing parameters in the action URL.'
+    );
+    assertTrueValue(
+        preg_match('/<form[^>]*class="policy-review-form panel-content"[^>]*action="[^"]*policy_data/s', $download['body']) !== 1,
+        'Expected policy data fields not to appear in the policy review form action URL.'
+    );
+    assertTrueValue(
+        preg_match('/<form[^>]*class="policy-review-form panel-content"[^>]*action="[^"]*policy_locked/s', $download['body']) !== 1,
+        'Expected policy lock fields not to appear in the policy review form action URL.'
+    );
     assertTrueValue(!str_contains($download['body'], 'data-policy-apply-value="Model 3"'));
     assertTrueValue(!str_contains($download['body'], 'data-policy-apply-value="204000 PLN"'));
 });

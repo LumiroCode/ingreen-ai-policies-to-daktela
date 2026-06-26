@@ -130,6 +130,12 @@ $vehicleNetValueFromGross = static function (?string $value) use ($vehicleValueA
 
     return $formattedVehicleValue($amount / 1.23, $value);
 };
+
+$confirmationAction = '?' . http_build_query([
+    'ticket' => $ticketId,
+    'attachment' => (string) $selectedAttachmentIndex,
+    'access_token' => $accessToken,
+]);
 ?>
 
 <?php if ($policyRows !== []): ?>
@@ -152,11 +158,14 @@ $vehicleNetValueFromGross = static function (?string $value) use ($vehicleValueA
         <span class="count-badge"><?= count($policyRows) ?></span>
     </div>
 
-    <form id="review-panel-content" class="policy-review-form panel-content" method="get" novalidate>
-        <input type="hidden" name="ticket" value="<?= htmlspecialchars($ticketId, ENT_QUOTES, 'UTF-8') ?>">
+    <form
+        id="review-panel-content"
+        class="policy-review-form panel-content"
+        method="post"
+        action="<?= htmlspecialchars($confirmationAction, ENT_QUOTES, 'UTF-8') ?>"
+        novalidate
+    >
         <input type="hidden" name="title" value="<?= htmlspecialchars($ticketTitle, ENT_QUOTES, 'UTF-8') ?>">
-        <input type="hidden" name="attachment" value="<?= htmlspecialchars((string) $selectedAttachmentIndex, ENT_QUOTES, 'UTF-8') ?>">
-        <input type="hidden" name="access_token" value="<?= htmlspecialchars($accessToken, ENT_QUOTES, 'UTF-8') ?>">
 
         <div class="policy-fields">
             <label class="lock-control lock-control-all" for="policy-lock-all">
