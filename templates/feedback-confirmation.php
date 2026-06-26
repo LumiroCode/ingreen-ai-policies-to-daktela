@@ -45,7 +45,12 @@ if ($extractedData instanceof \Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedP
     ];
 }
 
+$requiredPolicyRows = array_filter(
+    $policyRows,
+    static fn (array $row): bool => trim((string) ($row['value'] ?? '')) !== ''
+);
 $allLocked = $policyRows !== [] && count(array_intersect_key($selectedLockedFields, $policyRows)) === count($policyRows);
+$allRequiredLocked = count(array_intersect_key($selectedLockedFields, $requiredPolicyRows)) === count($requiredPolicyRows);
 $selectedAttachment = $selectedAttachmentIndex !== null && ctype_digit($selectedAttachmentIndex)
     ? ($attachments[(int) $selectedAttachmentIndex] ?? null)
     : null;
@@ -286,7 +291,7 @@ $vehicleNetValueFromGross = static function (?string $value) use ($vehicleValueA
                 type="submit"
                 name="confirmation"
                 value="yes"
-                <?= $allLocked ? '' : 'disabled' ?>
+                <?= $allRequiredLocked ? '' : 'disabled' ?>
                 title="Przycisk wyłączony na czas dalszej implementacji."
                 disabled
             >Zapisz</button>
@@ -295,7 +300,7 @@ $vehicleNetValueFromGross = static function (?string $value) use ($vehicleValueA
                 type="submit"
                 name="confirmation"
                 value="no"
-                <?= $allLocked ? 'disabled' : '' ?>
+                <?= $allRequiredLocked ? 'disabled' : '' ?>
             >Odczytaj ponownie</button>
         </div>
     </form>

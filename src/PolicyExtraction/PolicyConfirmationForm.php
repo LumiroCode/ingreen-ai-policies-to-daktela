@@ -58,14 +58,14 @@ final class PolicyConfirmationForm
 
     public function validationMessage(?string $confirmation): ?string
     {
-        $allLocked = count($this->lockedFields) === count(ExtractedPolicyData::FIELDS);
+        $allRequiredLocked = $this->allRequiredFieldsLocked();
 
-        if ($confirmation === 'yes' && !$allLocked) {
-            return 'Aby potwierdzić poprawność danych, zaznacz wszystkie pola jako poprawne.';
+        if ($confirmation === 'yes' && !$allRequiredLocked) {
+            return 'Aby potwierdzić poprawność danych, zaznacz wszystkie niepuste pola jako poprawne.';
         }
 
-        if ($confirmation === 'no' && $allLocked) {
-            return 'Nie można zgłosić niepoprawnych danych, gdy wszystkie pola są oznaczone jako poprawne.';
+        if ($confirmation === 'no' && $allRequiredLocked) {
+            return 'Nie można zgłosić niepoprawnych danych, gdy wszystkie niepuste pola są oznaczone jako poprawne.';
         }
 
         return null;
@@ -123,5 +123,16 @@ final class PolicyConfirmationForm
         $value = trim($value);
 
         return $value !== '' ? $value : null;
+    }
+
+    private function allRequiredFieldsLocked(): bool
+    {
+        foreach (ExtractedPolicyData::FIELDS as $field) {
+            if (($this->values[$field] ?? null) !== null && !isset($this->lockedFields[$field])) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

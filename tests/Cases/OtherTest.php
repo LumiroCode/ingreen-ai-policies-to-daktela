@@ -265,3 +265,40 @@ test('policy confirmation storage error preserves submitted policy form state', 
     assertTrueValue(str_contains($response['body'], 'value="123 456 PLN"'));
     assertPolicyFieldLocked($response['body'], 'marka');
 });
+
+
+test('policy confirmation requires locks only for non-empty values', function (): void {
+    $form = PolicyConfirmationForm::fromRequest(
+        [
+            'marka' => 'Manualna marka',
+            'model' => '',
+            'nr_polisy' => '   ',
+        ],
+        [
+            'marka' => '1',
+        ]
+    );
+
+    assertSameValue(null, $form->validationMessage('yes'));
+    assertSameValue(
+        'Nie można zgłosić niepoprawnych danych, gdy wszystkie niepuste pola są oznaczone jako poprawne.',
+        $form->validationMessage('no')
+    );
+});
+
+
+test('policy confirmation rejects unlocked non-empty values', function (): void {
+    $form = PolicyConfirmationForm::fromRequest(
+        [
+            'marka' => 'Manualna marka',
+            'model' => '',
+        ],
+        []
+    );
+
+    assertSameValue(
+        'Aby potwierdzić poprawność danych, zaznacz wszystkie niepuste pola jako poprawne.',
+        $form->validationMessage('yes')
+    );
+    assertSameValue(null, $form->validationMessage('no'));
+});

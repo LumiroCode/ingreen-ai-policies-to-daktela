@@ -173,6 +173,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const sync = () => {
             const allLocked = locks.length > 0 && locks.every((checkbox) => checkbox.checked);
+            const requiredLocks = locks.filter((checkbox) => {
+                const field = checkbox.closest('.policy-field');
+                const input = field === null ? null : field.querySelector('.policy-input');
+
+                return input !== null && input.value.trim() !== '';
+            });
+            const allRequiredLocked = requiredLocks.every((checkbox) => checkbox.checked);
             const someLocked = locks.some((checkbox) => checkbox.checked);
 
             locks.forEach((checkbox) => {
@@ -213,16 +220,27 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (saveButton !== null) {
-                saveButton.disabled = !allLocked;
+                saveButton.disabled = true;
             }
 
             if (retryButton !== null) {
-                retryButton.disabled = allLocked;
+                retryButton.disabled = allRequiredLocked;
             }
         };
 
         locks.forEach((checkbox) => {
             checkbox.addEventListener('change', () => {
+                if (feedback !== null) {
+                    feedback.hidden = true;
+                    feedback.textContent = '';
+                }
+
+                sync();
+            });
+        });
+
+        form.querySelectorAll('.policy-input').forEach((input) => {
+            input.addEventListener('input', () => {
                 if (feedback !== null) {
                     feedback.hidden = true;
                     feedback.textContent = '';
@@ -303,18 +321,24 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         form.addEventListener('submit', (event) => {
-            const allLocked = locks.length > 0 && locks.every((checkbox) => checkbox.checked);
+            const requiredLocks = locks.filter((checkbox) => {
+                const field = checkbox.closest('.policy-field');
+                const input = field === null ? null : field.querySelector('.policy-input');
+
+                return input !== null && input.value.trim() !== '';
+            });
+            const allRequiredLocked = requiredLocks.every((checkbox) => checkbox.checked);
             const confirmation = event.submitter instanceof HTMLButtonElement
                 ? event.submitter.value
-                : (allLocked ? 'yes' : 'no');
+                : (allRequiredLocked ? 'yes' : 'no');
             let message = '';
 
-            if (confirmation === 'yes' && !allLocked) {
-                message = 'Aby potwierdzić poprawność danych, zaznacz wszystkie pola jako poprawne.';
+            if (confirmation === 'yes' && !allRequiredLocked) {
+                message = 'Aby potwierdzić poprawność danych, zaznacz wszystkie niepuste pola jako poprawne.';
             }
 
-            if (confirmation === 'no' && allLocked) {
-                message = 'Nie można zgłosić niepoprawnych danych, gdy wszystkie pola są oznaczone jako poprawne.';
+            if (confirmation === 'no' && allRequiredLocked) {
+                message = 'Nie można zgłosić niepoprawnych danych, gdy wszystkie niepuste pola są oznaczone jako poprawne.';
             }
 
             if (message !== '') {
