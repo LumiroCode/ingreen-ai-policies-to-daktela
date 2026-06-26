@@ -39,6 +39,7 @@ try {
         new ClaudePolicyDataExtractor(AnthropicClaudeMessagesClient::fromApiKey($config->claudeApiKey)),
         $logger,
         new DaktelaTicketPolicyValuesProvider($daktela, $logger),
+        $daktela,
         $daktela
     );
 

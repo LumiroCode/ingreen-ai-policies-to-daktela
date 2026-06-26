@@ -48,9 +48,27 @@ final class DaktelaCommunicationService
      * @param array<string, mixed> $data
      * @return array<string, mixed>
      */
+    public function postFormJson(string $path, array $data, string $errorCode = 'daktela_request_failed'): array
+    {
+        return $this->sendFormJson('POST', $path, $data, $errorCode);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
     public function putFormJson(string $path, array $data, string $errorCode = 'daktela_request_failed'): array
     {
-        $response = $this->request('PUT', $this->buildUrl($path), $this->authHeaders([
+        return $this->sendFormJson('PUT', $path, $data, $errorCode);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    private function sendFormJson(string $method, string $path, array $data, string $errorCode): array
+    {
+        $response = $this->request($method, $this->buildUrl($path), $this->authHeaders([
             'Accept' => 'application/json',
             'Content-Type' => 'application/x-www-form-urlencoded',
         ]), http_build_query($data));

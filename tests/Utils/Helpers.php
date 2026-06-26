@@ -43,7 +43,8 @@ function app(
     ?string $allowedUtilityOrigin = null,
     ?string $utilitySecretKey = null,
     ?PolicyDataExtractor $extractor = null,
-    bool $writeTicketPolicyData = false
+    bool $writeTicketPolicyData = false,
+    bool $writeConfirmedPolicyData = false
 ): WebhookApp
 {
     $config = new AppConfig('https://daktela.example', 'api-token', null, $dir . '/var', $dir . '/cache', 1_000_000, $allowedUtilityOrigin, $utilitySecretKey);
@@ -58,7 +59,8 @@ function app(
         $extractor ?? new FakePolicyDataExtractor(),
         $logger,
         new DaktelaTicketPolicyValuesProvider($daktela, $logger),
-        $writeTicketPolicyData ? $daktela : null
+        $writeTicketPolicyData || $writeConfirmedPolicyData ? $daktela : null,
+        $writeConfirmedPolicyData ? $daktela : null
     );
 }
 

@@ -6,6 +6,7 @@ namespace Ingreen\DaktelaPolicy;
 
 use Ingreen\DaktelaPolicy\Config\AppConfig;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
+use Ingreen\DaktelaPolicy\PolicyExtraction\ConfirmedPolicyDataWriter;
 use Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyConfirmationForm;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataCache;
@@ -27,7 +28,8 @@ final class WebhookApp
         private readonly PolicyDataExtractor $policyDataExtractor,
         private readonly AppLogger $logger,
         private readonly ?TicketPolicyValuesProvider $ticketPolicyValuesProvider = null,
-        private readonly ?TicketPolicyDataWriter $ticketPolicyDataWriter = null
+        private readonly ?TicketPolicyDataWriter $ticketPolicyDataWriter = null,
+        private readonly ?ConfirmedPolicyDataWriter $confirmedPolicyDataWriter = null
     ) {
         $this->accessGuard = new WebhookAccessGuard($config, $tabSignatureVerifier, $logger);
         $this->policyDataCache = new PolicyDataCache($config->varDir);
@@ -378,7 +380,12 @@ final class WebhookApp
                 ]);
             }
 
-            $this->ticketPolicyDataWriter?->updateTicketPolicyData($ticketId, $extractedData);
+            if ($this->confirmedPolicyDataWriter !== null) {
+                $this->confirmedPolicyDataWriter->saveConfirmedPolicyData($ticketId, $extractedData);
+            } else {
+                $this->ticketPolicyDataWriter?->updateTicketPolicyData($ticketId, $extractedData);
+            }
+
             $this->policyDataCache->saveConfirmed($ticketId, $attachment, $extractedData);
             $this->policyDataCache->deletePending($ticketId, $attachment);
 
@@ -390,9 +397,11 @@ final class WebhookApp
                     $attachments,
                     [
                         'type' => 'success',
-                        'text' => $this->ticketPolicyDataWriter === null
+                        'text' => $this->confirmedPolicyDataWriter !== null
+                            ? 'Zaakceptowane wartości zostały zapisane do ticketa i rekordu CRM polisy w Daktela.'
+                            : ($this->ticketPolicyDataWriter === null
                             ? 'Zaakceptowane wartości zostały zapisane do cache.'
-                            : 'Zaakceptowane wartości zostały zapisane do ticketa w Daktela.',
+                            : 'Zaakceptowane wartości zostały zapisane do ticketa w Daktela.'),
                     ],
                     $extractedData,
                     $attachmentIndex,
@@ -540,6 +549,9 @@ final class WebhookApp
             'policy_temp_dir_failed', 'policy_temp_write_failed', 'policy_pdf_not_readable' => 'Nie udało się zapisać pliku polisy do odczytu.',
             'policy_data_storage_failed', 'policy_data_not_found' => 'Nie udało się zapisać potwierdzonych danych polisy.',
             'daktela_ticket_policy_update_failed' => 'Nie udało się zapisać danych polisy do ticketa w Daktela.',
+            'invalid_policy_crm_lookup_arguments' => 'Dane dla rekordu CRM polisy nie zostały zapisane. Uzupełnij numer rejestracyjny pojazdu i VIN w formularzu, a następnie spróbuj ponownie.',
+            'multiple_policy_crm_records_found' => 'Dane dla rekordu CRM polisy nie zostały zapisane. Znaleziono więcej niż jeden pasujący rekord CRM polisy dla numeru rejestracyjnego lub VIN. Usuń zbędne rekordy CRM polis tak, aby pozostał tylko jeden, a następnie spróbuj ponownie.',
+            'daktela_policy_crm_save_failed' => 'Nie udało się zapisać danych do rekordu CRM polisy w Daktela.',
             'claude_policy_extraction_failed' => $this->claudePolicyExtractionErrorMessage($exception),
             'policy_extraction_parse_failed' => 'Claude zwrócił odpowiedź w nieoczekiwanym formacie.',
             default => 'Nie udało się przetworzyć pliku polisy.',

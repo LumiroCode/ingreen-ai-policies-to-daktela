@@ -181,6 +181,168 @@ test('Daktela ticket update failure preserves confirmation form and does not sav
 });
 
 
+test('confirmed policy data updates matching CRM record using form registration and VIN', function (): void {
+    $dir = tempDir();
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/scan.pdf', 'title' => 'scan.pdf', 'type' => 'application/pdf'],
+                ],
+                'customFields' => [
+                    'nr_rejestracyjny' => 'STALE-REG',
+                    'vin' => 'STALE-VIN',
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/api/v6/tickets/123.json' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'user' => ['name' => 'agent_1'],
+                'contact' => ['name' => 'contact_1'],
+            ],
+        ]),
+        '/api/v6/crmRecords' => jsonResponse([
+            'result' => [
+                'data' => [
+                    [
+                        'name' => 'record_form_match',
+                        'title' => 'Polisy',
+                        'customFields' => [
+                            'nr_rejestracyjny' => 'FORM-REG',
+                            'vin' => 'FORM-VIN',
+                        ],
+                    ],
+                ],
+            ],
+        ]),
+        '/api/v6/crmRecords/record_form_match.json' => jsonResponse(['result' => ['name' => 'record_form_match']]),
+        '/files/scan.pdf' => pdfResponse(),
+    ]);
+    $app = app($fake, $dir, writeConfirmedPolicyData: true);
+
+    $extracted = $app->handle('123', '0', daktelaAccessToken('123'));
+    $confirmed = $app->handle(
+        '123',
+        '0',
+        daktelaAccessToken('123'),
+        confirmation: 'yes',
+        policyData: [
+            'nr_rejestracyjny' => 'FORM-REG',
+            'vin' => 'FORM-VIN',
+            'marka' => 'Manualna marka',
+            'model' => 'Manualny model',
+            'nr_polisy' => 'POL-123',
+        ],
+        policyLocked: \Ingreen\DaktelaPolicy\PolicyExtraction\PolicyConfirmationForm::allLockedFields()
+    );
+
+    $crmUpdateRequest = null;
+    foreach ($fake->requests as $request) {
+        if ($request['method'] === 'PUT' && str_contains($request['url'], '/api/v6/crmRecords/record_form_match.json')) {
+            $crmUpdateRequest = $request;
+            break;
+        }
+    }
+
+    if ($crmUpdateRequest === null) {
+        throw new RuntimeException('Expected Daktela policy CRM update request.');
+    }
+
+    parse_str((string) $crmUpdateRequest['body'], $body);
+    $cache = new PolicyDataCache($dir . '/var');
+    $attachment = ['file' => '/files/scan.pdf', 'title' => 'scan.pdf', 'type' => 'application/pdf'];
+
+    assertSameValue(200, $extracted['status']);
+    assertSameValue(200, $confirmed['status']);
+    assertTrueValue(str_contains($confirmed['body'], 'Zaakceptowane wartości zostały zapisane do ticketa i rekordu CRM polisy w Daktela.'));
+    assertSameValue('FORM-REG', $body['customFields']['nr_rejestracyjny']);
+    assertSameValue('FORM-VIN', $body['customFields']['vin']);
+    assertSameValue('Manualna marka', $body['customFields']['marka']);
+    assertSameValue('POL-123', $body['customFields']['nr_polisy']);
+    assertSameValue('FORM-REG', $cache->confirmed('123', $attachment)?->field('nr_rejestracyjny'));
+});
+
+
+test('duplicate policy CRM records abort confirmation and do not save confirmed cache', function (): void {
+    $dir = tempDir();
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/scan.pdf', 'title' => 'scan.pdf', 'type' => 'application/pdf'],
+                ],
+                'customFields' => [],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/api/v6/tickets/123.json' => jsonResponse(['result' => ['name' => '123']]),
+        '/api/v6/crmRecords' => jsonResponse([
+            'result' => [
+                'data' => [
+                    [
+                        'name' => 'record_registration',
+                        'title' => 'Polisy',
+                        'customFields' => [
+                            'nr_rejestracyjny' => 'FORM-REG',
+                            'vin' => 'OTHER',
+                        ],
+                    ],
+                    [
+                        'name' => 'record_vin',
+                        'title' => 'Polisy',
+                        'customFields' => [
+                            'nr_rejestracyjny' => 'OTHER',
+                            'vin' => 'FORM-VIN',
+                        ],
+                    ],
+                ],
+            ],
+        ]),
+        '/files/scan.pdf' => pdfResponse(),
+    ]);
+    $app = app($fake, $dir, writeConfirmedPolicyData: true);
+
+    $extracted = $app->handle('123', '0', daktelaAccessToken('123'));
+    $failed = $app->handle(
+        '123',
+        '0',
+        daktelaAccessToken('123'),
+        confirmation: 'yes',
+        policyData: [
+            'nr_rejestracyjny' => 'FORM-REG',
+            'vin' => 'FORM-VIN',
+            'marka' => 'Manualna marka',
+            'nr_polisy' => 'POL-123',
+        ],
+        policyLocked: \Ingreen\DaktelaPolicy\PolicyExtraction\PolicyConfirmationForm::allLockedFields()
+    );
+
+    $crmWriteRequests = array_values(array_filter(
+        $fake->requests,
+        static fn (array $request): bool => $request['method'] !== 'GET'
+            && str_contains($request['url'], '/api/v6/crmRecords')
+    ));
+    $cache = new PolicyDataCache($dir . '/var');
+    $attachment = ['file' => '/files/scan.pdf', 'title' => 'scan.pdf', 'type' => 'application/pdf'];
+
+    assertSameValue(200, $extracted['status']);
+    assertSameValue(409, $failed['status']);
+    assertTrueValue(str_contains($failed['body'], 'Dane dla rekordu CRM polisy nie zostały zapisane.'));
+    assertTrueValue(str_contains($failed['body'], 'Znaleziono więcej niż jeden pasujący rekord CRM polisy'));
+    assertTrueValue(str_contains($failed['body'], 'value="Manualna marka"'));
+    assertTrueValue(str_contains($failed['body'], 'value="POL-123"'));
+    assertSameValue(0, count($crmWriteRequests));
+    assertSameValue(null, $cache->confirmed('123', $attachment));
+    assertSameValue('Skoda', $cache->pending('123', $attachment)?->field('marka'));
+});
+
+
 test('confirmed policy data loaded from cache is locked by default', function (): void {
     $dir = tempDir();
     $downloadCount = 0;
