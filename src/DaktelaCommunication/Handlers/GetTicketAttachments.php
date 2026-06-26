@@ -199,12 +199,12 @@ final class GetTicketAttachments
     private function resolveAttachmentMapper(?array $activity, ?string $attachmentModel, string $sourcePath): ?string
     {
         $directModelMappers = [
-            'activitiesEmailFiles' => 'activitiesEmailFiles',
-            'activitiesWebFiles' => 'activitiesWebFiles',
-            'activitiesFbmFiles' => 'activitiesFbmFiles',
-            'activitiesIgdmFiles' => 'activitiesIgdmFiles',
-            'activitiesWapFiles' => 'activitiesWapFiles',
-            'activitiesVbrFiles' => 'activitiesVbrFiles',
+            'activitiesEmailFiles' => 'activitiesEmail',
+            'activitiesWebFiles' => 'activitiesWeb',
+            'activitiesFbmFiles' => 'activitiesFbm',
+            'activitiesIgdmFiles' => 'activitiesIgdm',
+            'activitiesWapFiles' => 'activitiesWap',
+            'activitiesVbrFiles' => 'activitiesVbr',
         ];
 
         if ($attachmentModel !== null && isset($directModelMappers[$attachmentModel])) {
@@ -220,12 +220,12 @@ final class GetTicketAttachments
         }
 
         return match ($this->normalizeModel($this->stringValue($activity['item']['_sys']['model'] ?? null))) {
-            'activitiesEmail' => 'activitiesEmailFiles',
-            'activitiesWeb' => 'activitiesWebFiles',
-            'activitiesFbm' => 'activitiesFbmFiles',
-            'activitiesIgdm' => 'activitiesIgdmFiles',
-            'activitiesWap' => 'activitiesWapFiles',
-            'activitiesVbr' => 'activitiesVbrFiles',
+            'activitiesEmail' => 'activitiesEmail',
+            'activitiesWeb' => 'activitiesWeb',
+            'activitiesFbm' => 'activitiesFbm',
+            'activitiesIgdm' => 'activitiesIgdm',
+            'activitiesWap' => 'activitiesWap',
+            'activitiesVbr' => 'activitiesVbr',
             default => null,
         };
     }

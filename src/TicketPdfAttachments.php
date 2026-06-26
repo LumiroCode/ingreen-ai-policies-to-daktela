@@ -154,14 +154,79 @@ final class TicketPdfAttachments
 
     private function normalizeDaktelaDownloadPath(string $value): string
     {
-        $queryPosition = strpos($value, '?');
-        $path = $queryPosition === false ? $value : substr($value, 0, $queryPosition);
+        $parts = parse_url($value);
 
-        if (!str_ends_with($path, '/file/download')) {
+        if ($parts === false) {
             return $value;
         }
 
-        return substr($value, 0, strlen($path)) . '.php' . ($queryPosition === false ? '' : substr($value, $queryPosition));
+        $path = $parts['path'] ?? '';
+        $query = [];
+        parse_str($parts['query'] ?? '', $query);
+
+        $pathChanged = false;
+        $queryChanged = false;
+
+        if (str_ends_with($path, '/file/download')) {
+            $path .= '.php';
+            $pathChanged = true;
+        }
+
+        if (isset($query['mapper']) && is_string($query['mapper'])) {
+            $mapper = $this->normalizeDaktelaDownloadMapper($query['mapper']);
+
+            if ($mapper !== $query['mapper']) {
+                $query['mapper'] = $mapper;
+                $queryChanged = true;
+            }
+        }
+
+        if (!$pathChanged && !$queryChanged) {
+            return $value;
+        }
+
+        $normalized = '';
+
+        if (isset($parts['scheme'])) {
+            $normalized .= $parts['scheme'] . '://';
+        }
+
+        if (isset($parts['user'])) {
+            $normalized .= $parts['user'];
+
+            if (isset($parts['pass'])) {
+                $normalized .= ':' . $parts['pass'];
+            }
+
+            $normalized .= '@';
+        }
+
+        if (isset($parts['host'])) {
+            $normalized .= $parts['host'];
+        }
+
+        if (isset($parts['port'])) {
+            $normalized .= ':' . $parts['port'];
+        }
+
+        $normalized .= $path;
+        $queryString = http_build_query($query);
+        $normalized .= $queryString !== '' ? '?' . $queryString : '';
+        $normalized .= isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
+
+        return $normalized;
+    }
+
+    private function normalizeDaktelaDownloadMapper(string $mapper): string
+    {
+        return [
+            'activitiesEmailFiles' => 'activitiesEmail',
+            'activitiesWebFiles' => 'activitiesWeb',
+            'activitiesFbmFiles' => 'activitiesFbm',
+            'activitiesIgdmFiles' => 'activitiesIgdm',
+            'activitiesWapFiles' => 'activitiesWap',
+            'activitiesVbrFiles' => 'activitiesVbr',
+        ][$mapper] ?? $mapper;
     }
 
     /**
