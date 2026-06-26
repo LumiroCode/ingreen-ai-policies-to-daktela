@@ -416,6 +416,7 @@ test('ticket PDF list renders table and does not download files', function (): v
     assertTrueValue(str_contains($response['body'], 'id="processing-message"'));
     assertTrueValue(str_contains($response['body'], 'Trwa odczyt danych z polisy.'));
     assertTrueValue(str_contains(file_get_contents(dirname(__DIR__) . '/public/assets/app.js'), 'button.textContent = loadingLabel;'));
+    assertTrueValue(str_contains(file_get_contents(dirname(__DIR__) . '/public/assets/app.js'), 'attachmentActionButtons.forEach'));
     assertTrueValue(!str_contains($response['body'], 'readme.txt'));
     assertSameValue(0, $downloadCount);
 });

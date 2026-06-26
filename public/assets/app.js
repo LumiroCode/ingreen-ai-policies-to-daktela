@@ -31,11 +31,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    const attachmentActionButtons = Array.from(
+        document.querySelectorAll('.attachment-read-form button[type="submit"], .attachment-refresh-form button[type="submit"]')
+    );
+
     document.querySelectorAll('.attachment-read-form, .attachment-refresh-form').forEach((form) => {
         form.addEventListener('submit', () => {
             const button = form.querySelector('button[type="submit"]');
             const loadingLabel = form.dataset.loadingLabel || 'Odczytuję...';
             const showProcessingMessage = form.dataset.showProcessingMessage !== 'false';
+
+            if (form.classList.contains('attachment-read-form')) {
+                attachmentActionButtons.forEach((actionButton) => {
+                    actionButton.disabled = true;
+                });
+            }
 
             if (button !== null) {
                 button.disabled = true;
