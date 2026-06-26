@@ -421,8 +421,15 @@ h2 {
     font-weight: 800;
     gap: 12px;
     justify-content: space-between;
-    min-width: min(100%, 260px);
+    width: 100%;
     padding: 0 4px;
+}
+
+.policy-field-group legend::after {
+    content: "";
+    flex: 1 1 auto;
+    border-bottom: 1px solid var(--line);
+    margin-left: 8px;
 }
 
 .lock-control-group {
@@ -435,10 +442,13 @@ h2 {
 }
 
 .policy-field {
-    border-radius: 7px;
     display: grid;
-    gap: 6px;
-    padding: 8px;
+    gap: 3px;
+    padding: 18px 6px;
+}
+
+.policy-field:not(:last-child) {
+    border-bottom: 1px solid var(--line-strong);
 }
 
 .policy-field.locked {
@@ -485,7 +495,7 @@ h2 {
 
 .policy-input {
     background: #ffffff;
-    border: 1px solid var(--line-strong);
+    border: 1px solid var(--line);
     border-radius: 6px;
     color: var(--text);
     min-height: 34px;
@@ -509,19 +519,19 @@ h2 {
     min-width: 0;
 }
 
-.policy-system-value-text {
+.policy-system-value .policy-system-value-text {
     flex: 1 1 auto;
     font-size: 12px;
     min-width: 0;
     overflow-wrap: anywhere;
 }
 
-.policy-system-value-text span {
+.policy-system-value .policy-system-value-text span {
     color: #475467;
     font-weight: 700;
 }
 
-.policy-apply-system-value {
+.button.policy-apply-system-value {
     flex: 0 0 auto;
     font-size: 12px;
     min-height: 28px;
