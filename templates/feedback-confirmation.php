@@ -223,15 +223,32 @@ $vehicleNetValueFromGross = static function (?string $value) use ($vehicleValueA
                                         data-policy-net-gross-value
                                     >* 1,23 = <span><?= htmlspecialchars($vehicleGrossValueFromNet($row['value'] ?? null), ENT_QUOTES, 'UTF-8') ?></span></div>
                                 <?php endif; ?>
-                                <input
-                                    id="<?= htmlspecialchars($fieldId, ENT_QUOTES, 'UTF-8') ?>"
-                                    class="policy-input"
-                                    type="text"
-                                    name="policy_data[<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>]"
-                                    value="<?= htmlspecialchars((string) ($row['value'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                    <?= in_array($key, ['wartosc_pojazdu_brutto', 'wartosc_pojazdu_netto'], true) ? 'aria-describedby="' . htmlspecialchars($descriptionId, ENT_QUOTES, 'UTF-8') . '"' : '' ?>
-                                    <?= $locked ? 'readonly' : '' ?>
-                                >
+                                <div class="policy-input-control">
+                                    <input
+                                        id="<?= htmlspecialchars($fieldId, ENT_QUOTES, 'UTF-8') ?>"
+                                        class="policy-input"
+                                        type="text"
+                                        name="policy_data[<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>]"
+                                        value="<?= htmlspecialchars((string) ($row['value'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                        <?= in_array($key, ['wartosc_pojazdu_brutto', 'wartosc_pojazdu_netto'], true) ? 'aria-describedby="' . htmlspecialchars($descriptionId, ENT_QUOTES, 'UTF-8') . '"' : '' ?>
+                                        <?= $locked ? 'readonly' : '' ?>
+                                    >
+                                    <div class="policy-input-actions">
+                                        <button
+                                            class="policy-input-action policy-restore-ai-value"
+                                            type="button"
+                                            data-policy-ai-value="<?= htmlspecialchars((string) ($row['value'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                            title="Przywróć wartość odczytaną przez AI"
+                                            aria-label="Przywróć wartość odczytaną przez AI dla pola <?= htmlspecialchars($row['label'], ENT_QUOTES, 'UTF-8') ?>"
+                                        >AI</button>
+                                        <button
+                                            class="policy-input-action policy-clear-value"
+                                            type="button"
+                                            title="Wyczyść pole"
+                                            aria-label="Wyczyść pole <?= htmlspecialchars($row['label'], ENT_QUOTES, 'UTF-8') ?>"
+                                        >&times;</button>
+                                    </div>
+                                </div>
                                 <?php if ($ticketValue !== null): ?>
                                     <div class="policy-system-value">
                                         <span class="policy-system-value-text">

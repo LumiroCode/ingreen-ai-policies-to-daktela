@@ -500,6 +500,10 @@ h2 {
     padding: 8px;
 }
 
+.policy-input-control {
+    position: relative;
+}
+
 .policy-input {
     background: #ffffff;
     border: 1px solid var(--line);
@@ -507,7 +511,7 @@ h2 {
     color: var(--text);
     min-height: 34px;
     min-width: 0;
-    padding: 7px 8px;
+    padding: 7px 70px 7px 8px;
     width: 100%;
 }
 
@@ -515,6 +519,48 @@ h2 {
     background: #f4fbf8;
     border-color: #9ac8b8;
     color: #174d3f;
+}
+
+.policy-input-actions {
+    align-items: center;
+    bottom: 4px;
+    display: flex;
+    gap: 3px;
+    position: absolute;
+    right: 4px;
+    top: 4px;
+}
+
+.policy-input-action {
+    align-items: center;
+    background: #f8fafc;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    color: #26323f;
+    cursor: pointer;
+    display: inline-flex;
+    flex: 0 0 auto;
+    font-size: 11px;
+    font-weight: 800;
+    height: 26px;
+    justify-content: center;
+    line-height: 1;
+    min-width: 26px;
+    padding: 0 6px;
+}
+
+.policy-input-action:hover {
+    border-color: #7f8b99;
+}
+
+.policy-input-action[disabled] {
+    cursor: default;
+    opacity: 0.55;
+}
+
+.policy-input-action:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
 }
 
 .policy-system-value {

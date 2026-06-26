@@ -53,6 +53,17 @@ test('policy confirmation form shows ticket custom field value without replacing
     assertTrueValue(str_contains($download['body'], 'SYSTEM &amp; &lt;Tesla&gt;'));
     assertTrueValue(str_contains($download['body'], 'data-policy-apply-value="SYSTEM &amp; &lt;Tesla&gt;"'));
     assertTrueValue(str_contains($download['body'], 'class="button secondary policy-apply-system-value"'));
+    assertSameValue(
+        count(\Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData::FIELDS),
+        substr_count($download['body'], 'class="policy-input-action policy-restore-ai-value"')
+    );
+    assertSameValue(
+        count(\Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData::FIELDS),
+        substr_count($download['body'], 'class="policy-input-action policy-clear-value"')
+    );
+    assertTrueValue(str_contains($download['body'], 'data-policy-ai-value="LLM Tesla"'));
+    assertTrueValue(str_contains($download['body'], '>AI</button>'));
+    assertTrueValue(str_contains($download['body'], '>&times;</button>'));
     assertTrueValue(!str_contains($download['body'], 'data-policy-apply-value="Model 3"'));
     assertTrueValue(!str_contains($download['body'], 'data-policy-apply-value="204000 PLN"'));
 });

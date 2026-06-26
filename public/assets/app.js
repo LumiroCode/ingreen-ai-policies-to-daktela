@@ -66,6 +66,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const saveButton = form.querySelector('button[name="confirmation"][value="yes"]');
         const retryButton = form.querySelector('button[name="confirmation"][value="no"]');
         const systemValueButtons = Array.from(form.querySelectorAll('.policy-apply-system-value'));
+        const restoreAiValueButtons = Array.from(form.querySelectorAll('.policy-restore-ai-value'));
+        const clearValueButtons = Array.from(form.querySelectorAll('.policy-clear-value'));
+
+        const applyInputValue = (input, value) => {
+            input.value = value;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            input.focus();
+        };
 
         const parseVehicleValueAmount = (value) => {
             const trimmedValue = value.trim();
@@ -169,6 +178,9 @@ document.addEventListener('DOMContentLoaded', () => {
             locks.forEach((checkbox) => {
                 const field = checkbox.closest('.policy-field');
                 const input = field === null ? null : field.querySelector('.policy-input');
+                const valueButtons = field === null
+                    ? []
+                    : Array.from(field.querySelectorAll('.policy-input-action, .policy-apply-system-value'));
 
                 if (field !== null) {
                     field.classList.toggle('locked', checkbox.checked);
@@ -177,6 +189,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (input !== null) {
                     input.readOnly = checkbox.checked;
                 }
+
+                valueButtons.forEach((button) => {
+                    button.disabled = checkbox.checked;
+                });
             });
 
             if (lockAll !== null) {
@@ -258,9 +274,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 const value = button.dataset.policyApplyValue;
 
                 if (input !== null && value !== undefined) {
-                    input.value = value;
-                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                    applyInputValue(input, value);
+                }
+            });
+        });
+
+        restoreAiValueButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                const control = button.closest('.policy-input-control');
+                const input = control === null ? null : control.querySelector('.policy-input');
+                const value = button.dataset.policyAiValue;
+
+                if (input !== null && value !== undefined) {
+                    applyInputValue(input, value);
+                }
+            });
+        });
+
+        clearValueButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                const control = button.closest('.policy-input-control');
+                const input = control === null ? null : control.querySelector('.policy-input');
+
+                if (input !== null) {
+                    applyInputValue(input, '');
                 }
             });
         });
