@@ -54,7 +54,10 @@ final class DaktelaCommunicationService
             'Accept' => 'application/pdf,*/*',
         ]));
 
-        $this->assertSuccessfulResponse($response, $file, 'attachment_download_failed');
+        $this->assertSuccessfulResponse($response, $file, 'attachment_download_failed', [
+            'contentType' => $this->header($response['headers'], 'Content-Type'),
+            'bodyPreview' => substr($response['body'], 0, 500),
+        ]);
 
         if (strlen($response['body']) > $maxBytes) {
             throw new AppException(413, 'attachment_too_large', 'Downloaded attachment exceeds configured size limit.', [
@@ -136,16 +139,17 @@ final class DaktelaCommunicationService
     /**
      * @param array{status:int,headers:array<string,string>,body:string} $response
      */
-    private function assertSuccessfulResponse(array $response, string $path, string $errorCode): void
+    private function assertSuccessfulResponse(array $response, string $path, string $errorCode, array $details = []): void
     {
         if ($response['status'] === 401 || $response['status'] === 403) {
-            throw new AppException(502, 'daktela_auth_failed', 'Daktela rejected API authentication.', [
+            throw new AppException(502, 'daktela_auth_failed', 'Daktela rejected API authentication.', $details + [
                 'statusCode' => $response['status'],
+                'path' => $path,
             ]);
         }
 
         if ($response['status'] < 200 || $response['status'] >= 300) {
-            throw new AppException(502, $errorCode, 'Daktela API request failed.', [
+            throw new AppException(502, $errorCode, 'Daktela API request failed.', $details + [
                 'statusCode' => $response['status'],
                 'path' => $path,
             ]);

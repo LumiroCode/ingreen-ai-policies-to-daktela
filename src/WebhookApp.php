@@ -525,7 +525,9 @@ final class WebhookApp
         }
 
         return match ($exception->errorCode()) {
-            'attachment_download_failed', 'upstream_http_error', 'daktela_auth_failed' => 'Nie udało się pobrać pliku polisy z systemu źródłowego.',
+            'attachment_download_failed' => 'System źródłowy odmówił pobrania wybranego pliku polisy lub zwrócił błąd dla tego załącznika.',
+            'upstream_http_error' => 'Nie udało się połączyć z systemem źródłowym podczas pobierania pliku polisy.',
+            'daktela_auth_failed' => 'Daktela odrzuciła uwierzytelnienie API podczas pobierania pliku polisy.',
             'attachment_too_large' => 'Plik polisy jest większy niż dozwolony limit.',
             'attachment_is_not_pdf' => 'Wybrany załącznik nie jest poprawnym plikiem PDF.',
             'policy_temp_dir_failed', 'policy_temp_write_failed', 'policy_pdf_not_readable' => 'Nie udało się zapisać pliku polisy do odczytu.',

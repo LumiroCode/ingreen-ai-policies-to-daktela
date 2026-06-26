@@ -1,8 +1,7 @@
 /vendor/
 /credentials/*
 !/credentials/*.example.php
-/var/cache/*
-/var/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
+/var/
 !/var/cache/.gitkeep
 *.log
 /docs/examples/

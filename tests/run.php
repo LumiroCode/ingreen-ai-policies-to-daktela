@@ -478,6 +478,40 @@ test('stale ticket PDF attachment cache is refreshed after one day', function ()
     assertTrueValue(str_contains($second['body'], 'scan-2.pdf'));
 });
 
+test('cached extensionless Daktela download URLs are normalized before download', function (): void {
+    $dir = tempDir();
+    $cacheDir = $dir . '/cache/ticket-attachments';
+    mkdir($cacheDir, 0775, true);
+    file_put_contents($cacheDir . '/' . hash('sha256', '15242') . '.json', json_encode([
+        'title' => '[TEST] Ticket',
+        'attachments' => [
+            [
+                'file' => '/file/download?mapper=activitiesComment&name=2051&iconHash=polisa_odnowieniowa_17559119.pdf&download=1',
+                'title' => 'polisa_odnowieniowa_17559119.pdf',
+                'type' => 'application/pdf',
+                'source' => 'activity.attachments',
+                'id' => '2051',
+                'previewUrl' => 'https://daktela.example/file/download?mapper=activitiesComment&name=2051&iconHash=polisa_odnowieniowa_17559119.pdf&download=0',
+            ],
+        ],
+    ], JSON_THROW_ON_ERROR));
+
+    $fake = new FakeDaktela([
+        '/file/download.php' => pdfResponse("%PDF-1.4\ncached"),
+    ]);
+    $app = app($fake, $dir);
+
+    $response = $app->handle('15242', '0', daktelaAccessToken('15242'));
+    $request = $fake->requests[0];
+
+    assertSameValue(200, $response['status']);
+    assertSameValue('https://daktela.example/file/download.php?mapper=activitiesComment&name=2051&iconHash=polisa_odnowieniowa_17559119.pdf&download=1', $request['url']);
+    assertTrueValue(str_contains(
+        $response['body'],
+        'href="https://daktela.example/file/download.php?mapper=activitiesComment&amp;name=2051&amp;iconHash=polisa_odnowieniowa_17559119.pdf&amp;download=0"'
+    ));
+});
+
 test('ticket PDF list refresh button bypasses cached Daktela attachment list', function (): void {
     $dir = tempDir();
     $ticketCalls = 0;
@@ -617,7 +651,7 @@ test('selected email activity attachment downloads through Daktela file mapper',
                 ],
             ],
         ]),
-        '/file/download' => pdfResponse("%PDF-1.4\nmapped"),
+        '/file/download.php' => pdfResponse("%PDF-1.4\nmapped"),
     ]);
     $app = app($fake, $dir);
 
@@ -626,7 +660,7 @@ test('selected email activity attachment downloads through Daktela file mapper',
     parse_str(parse_url($request['url'], PHP_URL_QUERY) ?: '', $query);
 
     assertSameValue(200, $download['status']);
-    assertSameValue('https://daktela.example/file/download?mapper=activitiesEmailFiles&name=35869&iconHash=Polisa_904001145228.pdf&download=1', $request['url']);
+    assertSameValue('https://daktela.example/file/download.php?mapper=activitiesEmailFiles&name=35869&iconHash=Polisa_904001145228.pdf&download=1', $request['url']);
     assertSameValue('activitiesEmailFiles', $query['mapper']);
     assertSameValue('35869', $query['name']);
     assertSameValue('Polisa_904001145228.pdf', $query['iconHash']);
@@ -637,7 +671,7 @@ test('selected email activity attachment downloads through Daktela file mapper',
     ));
     assertTrueValue(str_contains(
         $download['body'],
-        'href="https://daktela.example/file/download?mapper=activitiesEmailFiles&amp;name=35869&amp;iconHash=Polisa_904001145228.pdf&amp;download=0"'
+        'href="https://daktela.example/file/download.php?mapper=activitiesEmailFiles&amp;name=35869&amp;iconHash=Polisa_904001145228.pdf&amp;download=0"'
     ));
     assertTrueValue(str_contains(
         $download['body'],
@@ -672,7 +706,7 @@ test('selected activity comment attachment downloads through activities comment 
                 ],
             ],
         ]),
-        '/file/download' => pdfResponse("%PDF-1.4\ncomment"),
+        '/file/download.php' => pdfResponse("%PDF-1.4\ncomment"),
     ]);
     $app = app($fake, $dir);
 
@@ -680,7 +714,7 @@ test('selected activity comment attachment downloads through activities comment 
     $request = $fake->requests[2];
 
     assertSameValue(200, $download['status']);
-    assertSameValue('https://daktela.example/file/download?mapper=activitiesComment&name=2023&iconHash=Faktura+FV+9_4_2026.pdf&download=1', $request['url']);
+    assertSameValue('https://daktela.example/file/download.php?mapper=activitiesComment&name=2023&iconHash=Faktura+FV+9_4_2026.pdf&download=1', $request['url']);
     assertSameValue("%PDF-1.4\ncomment", file_get_contents($dir . '/var/policies/2023.pdf'));
 });
 
@@ -1339,7 +1373,51 @@ test('selected PDF attachment storage error renders message under table', functi
     assertSameValue(502, $response['status']);
     assertSameValue('text/html; charset=UTF-8', $response['headers']['Content-Type']);
     assertTrueValue(str_contains($response['body'], 'not-pdf.pdf'));
-    assertTrueValue(str_contains($response['body'], 'Nie udało się pobrać pliku polisy z systemu źródłowego.'));
+    assertTrueValue(str_contains($response['body'], 'System źródłowy odmówił pobrania wybranego pliku polisy lub zwrócił błąd dla tego załącznika.'));
+});
+
+test('selected PDF attachment auth error renders dedicated message under table', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/policy.pdf', 'title' => 'policy.pdf', 'type' => 'application/pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/files/policy.pdf' => ['status' => 401, 'headers' => ['Content-Type' => 'text/plain'], 'body' => 'unauthorized'],
+    ]);
+
+    $response = app($fake, tempDir())->handle('123', '0', daktelaAccessToken('123'));
+
+    assertSameValue(502, $response['status']);
+    assertTrueValue(str_contains($response['body'], 'Daktela odrzuciła uwierzytelnienie API podczas pobierania pliku polisy.'));
+});
+
+test('selected PDF attachment upstream HTTP error renders dedicated message under table', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/policy.pdf', 'title' => 'policy.pdf', 'type' => 'application/pdf'],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/files/policy.pdf' => function (): array {
+            throw new AppException(502, 'upstream_http_error', 'Daktela HTTP request failed.', ['error' => 'timeout']);
+        },
+    ]);
+
+    $response = app($fake, tempDir())->handle('123', '0', daktelaAccessToken('123'));
+
+    assertSameValue(502, $response['status']);
+    assertTrueValue(str_contains($response['body'], 'Nie udało się połączyć z systemem źródłowym podczas pobierania pliku polisy.'));
 });
 
 test('selected PDF attachment extraction error renders message under table', function (): void {

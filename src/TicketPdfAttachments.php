@@ -127,7 +127,7 @@ final class TicketPdfAttachments
 
         foreach ($payload['attachments'] as $attachment) {
             if (is_array($attachment) && isset($attachment['file']) && is_string($attachment['file'])) {
-                $attachments[] = $attachment;
+                $attachments[] = $this->normalizeCachedAttachment($attachment);
             }
         }
 
@@ -135,6 +135,33 @@ final class TicketPdfAttachments
             'attachments' => $attachments,
             'title' => isset($payload['title']) && is_string($payload['title']) ? $payload['title'] : null,
         ];
+    }
+
+    /**
+     * @param array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
+     * @return array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null}
+     */
+    private function normalizeCachedAttachment(array $attachment): array
+    {
+        $attachment['file'] = $this->normalizeDaktelaDownloadPath($attachment['file']);
+
+        if (isset($attachment['previewUrl']) && is_string($attachment['previewUrl'])) {
+            $attachment['previewUrl'] = $this->normalizeDaktelaDownloadPath($attachment['previewUrl']);
+        }
+
+        return $attachment;
+    }
+
+    private function normalizeDaktelaDownloadPath(string $value): string
+    {
+        $queryPosition = strpos($value, '?');
+        $path = $queryPosition === false ? $value : substr($value, 0, $queryPosition);
+
+        if (!str_ends_with($path, '/file/download')) {
+            return $value;
+        }
+
+        return substr($value, 0, strlen($path)) . '.php' . ($queryPosition === false ? '' : substr($value, $queryPosition));
     }
 
     /**
