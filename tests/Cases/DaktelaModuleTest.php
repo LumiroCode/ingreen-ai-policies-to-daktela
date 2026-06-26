@@ -623,6 +623,9 @@ test('Daktela module creates policy CRM record when no matching record exists', 
                 'user' => ['name' => 'agent_1'],
                 'contact' => ['name' => 'contact_1'],
                 'account' => ['name' => 'account_1'],
+                'customFields' => [
+                    'pochodzenie_polisy' => ['Dealer'],
+                ],
             ],
         ]),
         '/api/v6/crmRecords' => jsonResponse(['result' => ['data' => []]]),
@@ -664,6 +667,7 @@ test('Daktela module creates policy CRM record when no matching record exists', 
     assertSameValue('POL-123', $body['customFields']['nr_polisy']);
     assertSameValue('PZU', $body['customFields']['towarzystwo_ubezpieczeniowe']);
     assertSameValue('2027-01-31', $body['customFields']['data_konca_polisy']);
+    assertSameValue('Dealer', $body['customFields']['pochodzenie_polisy']);
     assertArrayMissingKey('status', $body);
 });
 
@@ -673,7 +677,11 @@ test('Daktela module updates policy CRM record when exactly one matching record 
         '/api/v6/tickets/ABC%2F123.json' => jsonResponse([
             'result' => [
                 'name' => 'ABC/123',
+                'user' => ['name' => 'agent_1'],
                 'contact' => ['name' => 'contact_1'],
+                'customFields' => [
+                    'pochodzenie_polisy' => 'Online',
+                ],
             ],
         ]),
         '/api/v6/crmRecords' => jsonResponse([
@@ -706,9 +714,11 @@ test('Daktela module updates policy CRM record when exactly one matching record 
     assertSameValue('PUT', $fake->requests[2]['method']);
     assertSameValue('https://daktela.example/api/v6/crmRecords/record_policy.json', $fake->requests[2]['url']);
     assertSameValue('ABC/123', $body['ticket']['name']);
+    assertSameValue('agent_1', $body['user']['name']);
     assertSameValue('contact_1', $body['contact']['name']);
     assertSameValue('FORMVIN123', $body['customFields']['vin']);
     assertSameValue('POL-456', $body['customFields']['nr_polisy']);
+    assertSameValue('Online', $body['customFields']['pochodzenie_polisy']);
 });
 
 
@@ -769,6 +779,9 @@ test('Daktela module creates vehicle CRM record when no matching vehicle record 
                 'user' => ['name' => 'agent_1'],
                 'contact' => ['name' => 'contact_1'],
                 'account' => ['name' => 'account_1'],
+                'customFields' => [
+                    'pochodzenie_polisy' => 'Salon',
+                ],
             ],
         ]),
         '/api/v6/crmRecords' => jsonResponse(['result' => ['data' => []]]),

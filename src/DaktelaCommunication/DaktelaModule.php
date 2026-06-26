@@ -236,7 +236,7 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
     {
         $ticket = $this->resultObject($ticketUpdate);
 
-        if ($this->hasAnyTicketReference($ticket)) {
+        if ($this->hasRequiredCrmTicketContext($ticket)) {
             return $ticket;
         }
 
@@ -261,14 +261,10 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
     /**
      * @param array<string,mixed> $ticket
      */
-    private function hasAnyTicketReference(array $ticket): bool
+    private function hasRequiredCrmTicketContext(array $ticket): bool
     {
-        foreach (['user', 'contact', 'account'] as $field) {
-            if (isset($ticket[$field])) {
-                return true;
-            }
-        }
-
-        return false;
+        return isset($ticket['user'])
+            && is_array($ticket['customFields'] ?? null)
+            && array_key_exists('pochodzenie_polisy', $ticket['customFields']);
     }
 }

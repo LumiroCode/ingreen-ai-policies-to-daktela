@@ -37,6 +37,13 @@ final class DaktelaPolicyCrmRecordMapper
      */
     public function toPolicyCrmPayload(string $ticketId, ExtractedPolicyData $data, array $ticket): array
     {
+        $customFields = $this->customFields($data);
+        $origin = $this->ticketCustomField($ticket, 'pochodzenie_polisy');
+
+        if ($origin !== null) {
+            $customFields['pochodzenie_polisy'] = $origin;
+        }
+
         $payload = [
             'title' => self::POLICY_CRM_TITLE,
             'type' => [
@@ -46,7 +53,7 @@ final class DaktelaPolicyCrmRecordMapper
             'stage' => 'OPEN',
             'description' => '',
             'ticket' => ['name' => $ticketId],
-            'customFields' => $this->customFields($data),
+            'customFields' => $customFields,
         ];
 
         foreach (['user', 'contact', 'account'] as $field) {
@@ -87,6 +94,43 @@ final class DaktelaPolicyCrmRecordMapper
         }
 
         if (!is_string($value) && !is_int($value)) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+
+        return $value !== '' ? $value : null;
+    }
+
+    /**
+     * @param array<string,mixed> $ticket
+     */
+    private function ticketCustomField(array $ticket, string $field): ?string
+    {
+        $customFields = $ticket['customFields'] ?? null;
+
+        if (!is_array($customFields)) {
+            return null;
+        }
+
+        return $this->scalarValue($customFields[$field] ?? null);
+    }
+
+    private function scalarValue(mixed $value): ?string
+    {
+        if (is_array($value)) {
+            foreach ($value as $item) {
+                $normalized = $this->scalarValue($item);
+
+                if ($normalized !== null) {
+                    return $normalized;
+                }
+            }
+
+            return null;
+        }
+
+        if (!is_string($value) && !is_int($value) && !is_float($value)) {
             return null;
         }
 
