@@ -128,7 +128,7 @@ function test(string $name, callable $test): void
         echo ".";
     } catch (Throwable $exception) {
         echo "\nFAIL: {$name}\n";
-        echo $exception::class . ': ' . $exception->getMessage() . "\n";
+        echo $exception::class . ': ' . $exception->getMessage() . "\n" . $exception->getTraceAsString() . "\n";
         exit(1);
     }
 }
@@ -1306,6 +1306,157 @@ test('Daktela module gets CRM records linked to ticket id', function (): void {
     assertSameValue('module-token', $fake->requests[0]['headers']['X-AUTH-TOKEN-OPENAPI']);
 });
 
+test('Daktela module finds policy CRM record identifiers by registration number or VIN', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/crmRecords' => jsonResponse([
+            'result' => [
+                'data' => [
+                    [
+                        'name' => 'record_registration',
+                        'title' => 'Polisy',
+                        'ticket' => ['name' => 'ABC/123'],
+                        'customFields' => [
+                            'nr_rejestracyjny' => ' wx12345 ',
+                            'vin' => 'OTHER',
+                        ],
+                    ],
+                    [
+                        'name' => 'record_vin',
+                        'title' => 'Polisy',
+                        'ticket' => ['name' => 'ABC/123'],
+                        'customFields' => [
+                            'nr_rejestracyjny' => 'OTHER',
+                            'vin' => ' tmb123 ',
+                        ],
+                    ],
+                    [
+                        'name' => 'record_vehicle',
+                        'title' => 'Pojazdy',
+                        'ticket' => ['name' => 'ABC/123'],
+                        'customFields' => [
+                            'nr_rejestracyjny' => 'WX12345',
+                            'vin' => 'TMB123',
+                        ],
+                    ],
+                    [
+                        'name' => 'record_without_custom_fields',
+                        'title' => 'Polisy',
+                        'ticket' => ['name' => 'ABC/123'],
+                        'customFields' => [],
+                    ],
+                    [
+                        'name' => 'record_non_scalar_field',
+                        'title' => 'Polisy',
+                        'ticket' => ['name' => 'ABC/123'],
+                        'customFields' => [
+                            'nr_rejestracyjny' => ['WX12345'],
+                            'vin' => ['TMB123'],
+                        ],
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    $recordIdentifiers = $module->findPolicyCrmRecordIdentifiers('ABC/123', 'WX12345', 'TMB123');
+    parse_str(parse_url($fake->requests[0]['url'], PHP_URL_QUERY) ?: '', $query);
+
+    assertSameValue(['record_registration', 'record_vin'], $recordIdentifiers);
+    assertSameValue('ticket.name', $query['filter']['field']);
+    assertSameValue('eq', $query['filter']['operator']);
+    assertSameValue('ABC/123', $query['filter']['value']);
+});
+
+test('Daktela module returns empty policy CRM record identifier list when nothing matches', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/crmRecords' => jsonResponse([
+            'result' => [
+                'data' => [
+                    [
+                        'name' => 'record_policy',
+                        'title' => 'Polisy',
+                        'customFields' => [
+                            'nr_rejestracyjny' => 'WA98765',
+                            'vin' => 'OTHER',
+                        ],
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    $recordIdentifiers = $module->findPolicyCrmRecordIdentifiers('123', 'WX12345', 'TMB123');
+
+    assertSameValue([], $recordIdentifiers);
+});
+
+test('Daktela module rejects empty policy CRM lookup values', function (): void {
+    $fake = new FakeDaktela([]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    try {
+        $module->findPolicyCrmRecordIdentifiers('123', ' ', 'TMB123');
+    } catch (AppException $exception) {
+        assertSameValue(400, $exception->statusCode());
+        assertSameValue('invalid_policy_crm_lookup_arguments', $exception->errorCode());
+        assertSameValue('registrationNumber', $exception->details()['field']);
+        assertSameValue(0, count($fake->requests));
+        return;
+    }
+
+    throw new RuntimeException('Expected exception.');
+});
+
+test('Daktela module rejects empty policy CRM lookup VIN', function (): void {
+    $fake = new FakeDaktela([]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    try {
+        $module->findPolicyCrmRecordIdentifiers('123', 'WX12345', ' ');
+    } catch (AppException $exception) {
+        assertSameValue(400, $exception->statusCode());
+        assertSameValue('invalid_policy_crm_lookup_arguments', $exception->errorCode());
+        assertSameValue('vin', $exception->details()['field']);
+        assertSameValue(0, count($fake->requests));
+        return;
+    }
+
+    throw new RuntimeException('Expected exception.');
+});
+
+test('Daktela module rejects matched policy CRM record without writable identifier', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/crmRecords' => jsonResponse([
+            'result' => [
+                'data' => [
+                    [
+                        'title' => 'Polisy',
+                        'customFields' => [
+                            'nr_rejestracyjny' => 'WX12345',
+                            'vin' => 'TMB123',
+                        ],
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    try {
+        $module->findPolicyCrmRecordIdentifiers('123', 'WX12345', 'TMB123');
+    } catch (AppException $exception) {
+        assertSameValue(502, $exception->statusCode());
+        assertSameValue('invalid_daktela_response', $exception->errorCode());
+        assertSameValue('/api/v6/crmRecords', $exception->details()['path']);
+        assertSameValue('123', $exception->details()['ticketId']);
+        return;
+    }
+
+    throw new RuntimeException('Expected exception.');
+});
+
 test('Daktela module rejects malformed CRM record list', function (): void {
     $fake = new FakeDaktela([
         '/api/v6/crmRecords' => jsonResponse(['result' => ['data' => null]]),
@@ -2029,13 +2180,13 @@ test('Claude policy extractor sends PDF document and prompt to Claude client', f
     assertTrueValue(in_array('rodzaj_polisy', $schema['required'], true));
     assertTrueValue(in_array('data_sprzedazy_lubezpieczenia', $schema['required'], true));
     assertTrueValue(in_array('data_sprzedazy_wznowienia', $schema['required'], true));
-    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'nr_rejestracyjny'));
-    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'stan_pojazdu'));
-    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'forma_wlasnosci'));
+    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'numer rejestracyjny'));
+    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'stan pojazdu'));
+    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'forma wlasnosci'));
     assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'wspolposiadacz'));
-    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'towarzystwo_ubezpieczeniowe'));
-    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'nr_polisy'));
-    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'rodzaj_polisy'));
+    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'towarzystwo ubezpieczeniowe'));
+    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'nr polisy'));
+    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'rodzaj polisy'));
     assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'Nie wymyślaj danych'));
     assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'pustego stringa ""'));
 });
