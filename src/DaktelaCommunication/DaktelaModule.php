@@ -27,6 +27,7 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
     private const VEHICLE_CRM_RECORD_TITLE = 'Pojazdy';
 
     private readonly DaktelaCommunicationService $service;
+    private readonly ?AppLogger $logger;
     private readonly CreatePolicyCrmRecord $createPolicyCrmRecord;
     private readonly CreateVehicleCrmRecord $createVehicleCrmRecord;
     private readonly FindCrmRecordIdentifiersByTitle $findCrmRecordIdentifiersByTitle;
@@ -47,7 +48,8 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
         ?AppLogger $logger = null
     ) {
         $this->service = new DaktelaCommunicationService($baseUrl, $apiToken, $requester);
-        $this->getCrmRecordsByTicketId = new GetCrmRecordsByTicketId($this->service);
+        $this->logger = $logger;
+        $this->getCrmRecordsByTicketId = new GetCrmRecordsByTicketId($this->service, $logger);
         $this->createPolicyCrmRecord = new CreatePolicyCrmRecord($this->service);
         $this->createVehicleCrmRecord = new CreateVehicleCrmRecord($this->service);
         $this->findCrmRecordIdentifiersByTitle = new FindCrmRecordIdentifiersByTitle($this->getCrmRecordsByTicketId);
@@ -79,13 +81,32 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
      */
     public function saveConfirmedPolicyData(string $ticketId, ExtractedPolicyData $data): array
     {
+        $this->logger?->info('Confirmed policy save started.', [
+            'ticketId' => $ticketId,
+        ]);
+
         $ticketUpdate = $this->updateTicketPolicyData($ticketId, $data);
+        $this->logger?->info('Daktela ticket policy data updated before CRM save.', [
+            'ticketId' => $ticketId,
+            'resultName' => $this->resultName($ticketUpdate),
+        ]);
+
         $ticket = $this->ticketForCrmPayload($ticketId, $ticketUpdate);
         $registrationNumber = $this->requiredCrmLookupField($data, 'nr_rejestracyjny', 'invalid_policy_crm_lookup_arguments');
         $vin = $this->requiredCrmLookupField($data, 'vin', 'invalid_policy_crm_lookup_arguments');
+        $this->logger?->info('Confirmed policy CRM lookup values prepared.', [
+            'ticketId' => $ticketId,
+            'lookup' => $this->lookupDiagnostics($registrationNumber, $vin),
+        ]);
+
         $policyCrmResponse = $this->savePolicyCrmRecord($ticketId, $data, $ticket, $registrationNumber, $vin);
 
         $this->saveVehicleCrmRecord($ticketId, $data, $ticket, $registrationNumber, $vin);
+
+        $this->logger?->info('Confirmed policy save finished.', [
+            'ticketId' => $ticketId,
+            'policyCrmResultName' => $this->resultName($policyCrmResponse),
+        ]);
 
         return $policyCrmResponse;
     }
@@ -102,8 +123,19 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
         string $vin
     ): array {
         $recordIdentifiers = $this->findPolicyCrmRecordIdentifiers($ticketId, $registrationNumber, $vin);
+        $this->logger?->info('Policy CRM record lookup finished.', [
+            'ticketId' => $ticketId,
+            'recordTitle' => self::POLICY_CRM_RECORD_TITLE,
+            'matchedCount' => count($recordIdentifiers),
+            'recordIdentifiers' => $recordIdentifiers,
+        ]);
 
         if (count($recordIdentifiers) > 1) {
+            $this->logger?->warning('Policy CRM save aborted because multiple matching records were found.', [
+                'ticketId' => $ticketId,
+                'recordIdentifiers' => $recordIdentifiers,
+            ]);
+
             throw new AppException(409, 'multiple_policy_crm_records_found', 'More than one matching policy CRM record was found.', [
                 'ticketId' => $ticketId,
                 'recordIdentifiers' => $recordIdentifiers,
@@ -111,10 +143,33 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
         }
 
         if ($recordIdentifiers === []) {
-            return $this->createPolicyCrmRecord->execute($ticketId, $data, $ticket);
+            $this->logger?->info('Creating policy CRM record.', [
+                'ticketId' => $ticketId,
+                'recordTitle' => self::POLICY_CRM_RECORD_TITLE,
+            ]);
+
+            $response = $this->createPolicyCrmRecord->execute($ticketId, $data, $ticket);
+            $this->logger?->info('Policy CRM record created.', [
+                'ticketId' => $ticketId,
+                'resultName' => $this->resultName($response),
+            ]);
+
+            return $response;
         }
 
-        return $this->updatePolicyCrmRecord->execute($recordIdentifiers[0], $ticketId, $data, $ticket);
+        $this->logger?->info('Updating policy CRM record.', [
+            'ticketId' => $ticketId,
+            'recordIdentifier' => $recordIdentifiers[0],
+        ]);
+
+        $response = $this->updatePolicyCrmRecord->execute($recordIdentifiers[0], $ticketId, $data, $ticket);
+        $this->logger?->info('Policy CRM record updated.', [
+            'ticketId' => $ticketId,
+            'recordIdentifier' => $recordIdentifiers[0],
+            'resultName' => $this->resultName($response),
+        ]);
+
+        return $response;
     }
 
     /**
@@ -129,8 +184,19 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
         string $vin
     ): array {
         $recordIdentifiers = $this->findVehicleCrmRecordIdentifiers($ticketId, $registrationNumber, $vin);
+        $this->logger?->info('Vehicle CRM record lookup finished.', [
+            'ticketId' => $ticketId,
+            'recordTitle' => self::VEHICLE_CRM_RECORD_TITLE,
+            'matchedCount' => count($recordIdentifiers),
+            'recordIdentifiers' => $recordIdentifiers,
+        ]);
 
         if (count($recordIdentifiers) > 1) {
+            $this->logger?->warning('Vehicle CRM save aborted because multiple matching records were found.', [
+                'ticketId' => $ticketId,
+                'recordIdentifiers' => $recordIdentifiers,
+            ]);
+
             throw new AppException(409, 'multiple_vehicle_crm_records_found', 'More than one matching vehicle CRM record was found.', [
                 'ticketId' => $ticketId,
                 'recordIdentifiers' => $recordIdentifiers,
@@ -138,10 +204,33 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
         }
 
         if ($recordIdentifiers === []) {
-            return $this->createVehicleCrmRecord->execute($ticketId, $data, $ticket);
+            $this->logger?->info('Creating vehicle CRM record.', [
+                'ticketId' => $ticketId,
+                'recordTitle' => self::VEHICLE_CRM_RECORD_TITLE,
+            ]);
+
+            $response = $this->createVehicleCrmRecord->execute($ticketId, $data, $ticket);
+            $this->logger?->info('Vehicle CRM record created.', [
+                'ticketId' => $ticketId,
+                'resultName' => $this->resultName($response),
+            ]);
+
+            return $response;
         }
 
-        return $this->updateVehicleCrmRecord->execute($recordIdentifiers[0], $ticketId, $data, $ticket);
+        $this->logger?->info('Updating vehicle CRM record.', [
+            'ticketId' => $ticketId,
+            'recordIdentifier' => $recordIdentifiers[0],
+        ]);
+
+        $response = $this->updateVehicleCrmRecord->execute($recordIdentifiers[0], $ticketId, $data, $ticket);
+        $this->logger?->info('Vehicle CRM record updated.', [
+            'ticketId' => $ticketId,
+            'recordIdentifier' => $recordIdentifiers[0],
+            'resultName' => $this->resultName($response),
+        ]);
+
+        return $response;
     }
 
     /**
@@ -237,8 +326,23 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
         $ticket = $this->resultObject($ticketUpdate);
 
         if ($this->hasRequiredCrmTicketContext($ticket)) {
+            $this->logger?->info('Using ticket update response as CRM payload context.', [
+                'ticketId' => $ticketId,
+                'hasUser' => isset($ticket['user']),
+                'hasContact' => isset($ticket['contact']),
+                'hasAccount' => isset($ticket['account']),
+            ]);
+
             return $ticket;
         }
+
+        $this->logger?->info('Ticket update response lacks CRM context; fetching ticket before CRM save.', [
+            'ticketId' => $ticketId,
+            'hasUser' => isset($ticket['user']),
+            'hasCustomFields' => is_array($ticket['customFields'] ?? null),
+            'hasPolicyOrigin' => is_array($ticket['customFields'] ?? null)
+                && array_key_exists('pochodzenie_polisy', $ticket['customFields']),
+        ]);
 
         return $this->resultObject($this->getTicketByName($ticketId));
     }
@@ -266,5 +370,42 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
         return isset($ticket['user'])
             && is_array($ticket['customFields'] ?? null)
             && array_key_exists('pochodzenie_polisy', $ticket['customFields']);
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function lookupDiagnostics(string $registrationNumber, string $vin): array
+    {
+        $vin = trim($vin);
+
+        return [
+            'registrationNumber' => trim($registrationNumber),
+            'vinLength' => strlen($vin),
+            'vinSuffix' => $vin === '' ? '' : substr($vin, -6),
+            'vinSha256' => hash('sha256', $vin),
+        ];
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     */
+    private function resultName(array $payload): ?string
+    {
+        $result = $payload['result'] ?? $payload;
+
+        if (!is_array($result)) {
+            return null;
+        }
+
+        $name = $result['name'] ?? null;
+
+        if (!is_string($name) && !is_int($name)) {
+            return null;
+        }
+
+        $name = trim((string) $name);
+
+        return $name !== '' ? $name : null;
     }
 }

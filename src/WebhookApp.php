@@ -85,7 +85,7 @@ final class WebhookApp
                         return $this->invalidPolicyConfirmationResponse($ticketId, $attachmentIndex, $confirmationForm, $validationMessage, $ticketTitle);
                     }
 
-                    return $this->confirmExtractedPolicyData($ticketId, $attachmentIndex, $confirmationForm, $ticketTitle);
+                    return $this->confirmExtractedPolicyData($ticketId, $attachmentIndex, $confirmationForm, $requestId, $ticketTitle);
                 }
 
                 if ($confirmation === 'no') {
@@ -227,6 +227,14 @@ final class WebhookApp
                 $storedData = $this->policyDataCache->confirmed($ticketId, $attachment);
 
                 if ($storedData !== null) {
+                    $this->logger->info('Confirmed policy data loaded from cache.', [
+                        'requestId' => $requestId,
+                        'ticketId' => $ticketId,
+                        'attachmentIndex' => $attachmentIndex,
+                        'attachment' => $this->attachmentDiagnostics($attachment),
+                        'policyData' => $this->policyDataDiagnostics($storedData),
+                    ]);
+
                     return [
                         'status' => 200,
                         'headers' => $this->accessGuard->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
@@ -248,6 +256,14 @@ final class WebhookApp
                 $pendingData = $this->policyDataCache->pending($ticketId, $attachment);
 
                 if ($pendingData !== null) {
+                    $this->logger->info('Pending policy data loaded from cache.', [
+                        'requestId' => $requestId,
+                        'ticketId' => $ticketId,
+                        'attachmentIndex' => $attachmentIndex,
+                        'attachment' => $this->attachmentDiagnostics($attachment),
+                        'policyData' => $this->policyDataDiagnostics($pendingData),
+                    ]);
+
                     return [
                         'status' => 200,
                         'headers' => $this->accessGuard->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
@@ -364,6 +380,7 @@ final class WebhookApp
         string $ticketId,
         string $attachmentIndex,
         PolicyConfirmationForm $confirmationForm,
+        string $requestId,
         ?string $ticketTitle = null
     ): array
     {
@@ -380,14 +397,40 @@ final class WebhookApp
                 ]);
             }
 
+            $this->logger->info('Policy confirmation save started.', [
+                'requestId' => $requestId,
+                'ticketId' => $ticketId,
+                'attachmentIndex' => $attachmentIndex,
+                'attachment' => $this->attachmentDiagnostics($attachment),
+                'lockedFieldCount' => count($confirmationForm->lockedFields()),
+                'writer' => $this->confirmedPolicyDataWriter !== null
+                    ? 'confirmedPolicyDataWriter'
+                    : ($this->ticketPolicyDataWriter !== null ? 'ticketPolicyDataWriter' : 'cacheOnly'),
+                'policyData' => $this->policyDataDiagnostics($extractedData),
+            ]);
+
             if ($this->confirmedPolicyDataWriter !== null) {
                 $this->confirmedPolicyDataWriter->saveConfirmedPolicyData($ticketId, $extractedData);
             } else {
                 $this->ticketPolicyDataWriter?->updateTicketPolicyData($ticketId, $extractedData);
             }
 
+            $this->logger->info('Policy confirmation data saved to Daktela writer.', [
+                'requestId' => $requestId,
+                'ticketId' => $ticketId,
+                'writer' => $this->confirmedPolicyDataWriter !== null
+                    ? 'confirmedPolicyDataWriter'
+                    : ($this->ticketPolicyDataWriter !== null ? 'ticketPolicyDataWriter' : 'cacheOnly'),
+            ]);
+
             $this->policyDataCache->saveConfirmed($ticketId, $attachment, $extractedData);
             $this->policyDataCache->deletePending($ticketId, $attachment);
+
+            $this->logger->info('Policy confirmation cache updated.', [
+                'requestId' => $requestId,
+                'ticketId' => $ticketId,
+                'attachmentIndex' => $attachmentIndex,
+            ]);
 
             return [
                 'status' => 200,
@@ -410,6 +453,14 @@ final class WebhookApp
                 ),
             ];
         } catch (AppException $exception) {
+            $this->logger->warning('Policy confirmation save failed.', [
+                'requestId' => $requestId,
+                'ticketId' => $ticketId,
+                'attachmentIndex' => $attachmentIndex,
+                'errorCode' => $exception->errorCode(),
+                'details' => $exception->details(),
+            ]);
+
             return [
                 'status' => $exception->statusCode(),
                 'headers' => $this->accessGuard->securityHeaders(['Content-Type' => 'text/html; charset=UTF-8']),
@@ -695,5 +746,46 @@ final class WebhookApp
         $filename = preg_replace('/[^A-Za-z0-9._-]+/', '_', $filename) ?: 'attachment.pdf';
 
         return str_ends_with(strtolower($filename), '.pdf') ? $filename : $filename . '.pdf';
+    }
+
+    /**
+     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
+     * @return array<string,mixed>
+     */
+    private function attachmentDiagnostics(array $attachment): array
+    {
+        return [
+            'id' => $attachment['id'] ?? null,
+            'name' => $attachment['name'] ?? null,
+            'title' => $attachment['title'] ?? null,
+            'type' => $attachment['type'] ?? null,
+            'fileSha256' => hash('sha256', $attachment['file']),
+        ];
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function policyDataDiagnostics(ExtractedPolicyData $data): array
+    {
+        $nonEmptyFields = [];
+
+        foreach ($data->fields as $field => $value) {
+            if ($value !== null && trim($value) !== '') {
+                $nonEmptyFields[] = $field;
+            }
+        }
+
+        $vin = trim((string) ($data->field('vin') ?? ''));
+
+        return [
+            'nonEmptyFieldCount' => count($nonEmptyFields),
+            'nonEmptyFields' => $nonEmptyFields,
+            'hasRegistrationNumber' => trim((string) ($data->field('nr_rejestracyjny') ?? '')) !== '',
+            'hasVin' => $vin !== '',
+            'vinLength' => strlen($vin),
+            'vinSuffix' => $vin === '' ? '' : substr($vin, -6),
+            'vinSha256' => $vin === '' ? null : hash('sha256', $vin),
+        ];
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers;
 
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Services\DaktelaCommunicationService;
+use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\Support\AppException;
 
 /**
@@ -14,8 +15,10 @@ final class GetCrmRecordsByTicketId
 {
     private const PAGE_SIZE = 100;
 
-    public function __construct(private readonly DaktelaCommunicationService $communicationService)
-    {
+    public function __construct(
+        private readonly DaktelaCommunicationService $communicationService,
+        private readonly ?AppLogger $logger = null
+    ) {
     }
 
     /**
@@ -58,9 +61,23 @@ final class GetCrmRecordsByTicketId
             ]);
         }
 
-        return array_values(array_filter(
+        $records = array_values(array_filter(
             $records,
             static fn (mixed $record): bool => is_array($record)
         ));
+
+        $this->logger?->info('Daktela ticket CRM records lookup page fetched.', [
+            'ticketId' => $ticketId,
+            'page' => $page,
+            'pageSize' => self::PAGE_SIZE,
+            'returnedCount' => count($records),
+            'filter' => [
+                'field' => 'ticket.name',
+                'operator' => 'eq',
+                'value' => $ticketId,
+            ],
+        ]);
+
+        return $records;
     }
 }
