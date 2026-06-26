@@ -231,7 +231,7 @@ final class WebhookApp
                             $attachments,
                             [
                                 'type' => 'success',
-                                'text' => 'Polisa została już kiedyś odczytana - wczytano zapisane dane.',
+                                'text' => 'Polisa została już kiedyś odczytana i zatwierdzona - wczytano zapisane dane.',
                             ],
                             $storedData,
                             $attachmentIndex,
@@ -252,7 +252,7 @@ final class WebhookApp
                             $attachments,
                             [
                                 'type' => 'success',
-                                'text' => 'Wczytano dane z poprzedniego odczytu polisy. Sprawdź wartości przed zapisaniem do systemu.',
+                                'text' => 'Wczytano dane z poprzedniego odczytu polisy przez AI. Sprawdź wartości przed zapisaniem do systemu.',
                             ],
                             $pendingData,
                             $attachmentIndex,

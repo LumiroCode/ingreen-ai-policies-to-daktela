@@ -1070,7 +1070,7 @@ test('confirmed policy data loaded from cache is locked by default', function ()
     assertSameValue(200, $cached['status']);
     assertSameValue(1, $downloadCount, 'Expected cached policy read not to download the attachment again.');
     assertTrueValue(
-        str_contains($cached['body'], 'Polisa została już kiedyś odczytana - wczytano zapisane dane.'),
+        str_contains($cached['body'], 'Polisa została już kiedyś odczytana i zatwierdzona - wczytano zapisane dane.'),
         'Expected policy data to be loaded from cache.'
     );
     assertPolicyFieldLocked($cached['body'], 'marka');
@@ -1118,7 +1118,7 @@ test('pending policy data loaded from cache on read click', function (): void {
     assertSameValue(1, $downloadCount, 'Expected pending policy read not to download the attachment again.');
     assertSameValue(1, count($extractor->paths), 'Expected pending policy read not to run extraction again.');
     assertTrueValue(
-        str_contains($cached['body'], 'Wczytano dane z poprzedniego odczytu polisy.'),
+        str_contains($cached['body'], 'Wczytano dane z poprzedniego odczytu polisy przez AI.'),
         'Expected policy data to be loaded from pending cache.'
     );
     assertTrueValue(str_contains($cached['body'], 'value="Toyota"'));
