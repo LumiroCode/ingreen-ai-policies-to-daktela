@@ -4,56 +4,57 @@ declare(strict_types=1);
 
 return [
     'prompt' => <<<'PROMPT'
-Odczytaj dane pojazdu i dane polisy z załączonej polisy.
+Odczytaj dane pojazdu i dane polisy z załączonego pliku PDF z polisą.
 
-W swoim wewnętrznym procesie myślowym najpierw wypisz wszystkie znalezione w dokumencie pary klucz-wartość, które mogą dotyczyć pojazdu lub polisy, a następnie zwaliduj każdą wybraną wartość w oparciu o treść załączonej polisy. Nie zwracaj tej analizy w odpowiedzi końcowej.
+W swoim wewnętrznym procesie myślowym najpierw znajdź w załączonym dokumencie wartości pól wymaganych w wynikowym obiekcie JSON, następnie wypisz wszystkie znalezione tak pary klucz-wartość, a następnie zwaliduj każdą taką parę na świeżo, ponownie, w oparciu o treść załączonej polisy.
 
-Nie wymyślaj danych. Każde pole może mieć wartość pustego stringa "", jeśli nie da się go jednoznacznie potwierdzić w polisie.
+Nie wymyślaj danych. Każde pole może mieć wartość pustego stringa "", jeśli nie da się go jednoznacznie potwierdzić w polisie. Stawiaj rzetelność i spójność danych ponad kompletność. Jeśli nie jesteś w stanie znaleźć wartości dla danego pola, zwróć pusty string "".
 
-Zwróć wyłącznie poprawny JSON z dokładnie tymi kluczami:
-{
-  "stan_pojazdu": "Nowy" | "Używany" | "Nieznany" | "",
-  "nr_rejestracyjny": string,
-  "marka": string,
-  "model": string,
-  "wersja": string,
-  "vin": string,
-  "forma_wlasnosci": "Własny" | "Leasing" | "Bank" | "Wynajem" | "",
-  "rocznik": string,
-  "przebieg": string,
-  "wartosc_pojazdu_brutto": string,
-  "wartosc_pojazdu_netto": string,
-  "kategoria_pojazdu": "Osobowy (Kat. M1)" | "Ciężarowy - LCV (DMC do 3500kg) Kat. N1" | "Motocykle i inne pojazdy (kat.L)" | "",
-  "sposob_korzystania": "Standardowy" | "Taxi" | "",
-  "typ_silnika": "Benzynowy" | "CNG/LPG" | "Diesel" | "Elektryczny" | "Hybryda" | "",
-  "pojemnosc_silnika": string,
-  "data_nabycia": string,
-  "data_pierwszej_rejestracji": string,
-  "planowana_data_rejestracji": string,
-  "wspolposiadacz": "tak" | "nie" | "",
-  "imie_wspolposiadacza": string,
-  "nazwisko_wspolposiadacza": string,
-  "pesel_wspolposiadacza": string,
-  "adres_wspolposiadacza": string,
-  "pakiet_ubezpieczeniowy": "tak" | "nie" | "",
-  "rodzaj_assistance": "minimalny" | "Polska" | "Europa (500-700km)" | "Europa (1000km)" | "Europa (+1500km)" | "",
-  "towarzystwo_ubezpieczeniowe": "Alianz" | "Aviva" | "AXA" | "Balcia" | "Benefia" | "Compensa" | "Concordia" | "Defend" | "Ergo Hestia" | "Ergo Hestia - Pakiet Dealerski" | "Ergo Hestia - Pakiet Dealerski polisa za 1zł" | "Euroins" | "Generali" | "Gothaer" | "HDI" | "Inne" | "Interrisk" | "Liberty Ubezpieczenia" | "Link4" | "Met Life" | "MTU" | "NN Życie" | "Open Life" | "PKO Ubezpieczenia" | "Polisa - Życie" | "Polskie Towarzystwo Reasekuracji" | "Proama" | "PTU" | "PZM" | "PZU" | "PZU - pakiet dealerski SIGMA" | "RESO Europa" | "Saltus" | "Signal Iduna" | "TU Europa" | "TUW" | "TUZ" | "Uniqa" | "Vienna Life" | "Warta" | "Wefox" | "Wiener" | "",
-  "nr_polisy": string,
-  "kategoria_tu": "Partner InGreen" | "Asap" | "Wiktoria" | "",
-  "data_konca_polisy": string,
-  "cena_pakietu": string,
-  "cena_wznowienia": string,
-  "oc_cena": string,
-  "ac_cena": string,
-  "cena_nnw": string,
-  "cena_assistance": string,
-  "gap_cena": string,
-  "cena_przedluzonej_gwarancji": string,
-  "pochodzenie_polisy": string,
-  "rodzaj_polisy": "OC" | "OC/AC" | "OC/AC/NNW" | "OC/AC/NNW/Assistance" | "AC" | "NNW" | "Assistance" | "GAP" | "Przedłużona Gwarancja" | "",
-  "data_sprzedazy_lubezpieczenia": string,
-  "data_sprzedazy_wznowienia": string
-}
+Zwróć wyłącznie wartości dla następujących pól:
+  stan pojazdu - nowy luib używany,
+  numer rejestracyjny,
+  marka,
+  model,
+  wersja wyposażenia,
+  vin,
+  forma wlasnosci pojazdu - "Własny", "Leasing", "Bank", "Wynajem" lub synonim którejś z nich,
+  rocznik - rok produkcji pojazdu,
+  przebieg - w kilometrach,
+  wartosc pojazdu brutto - w PLN,
+  wartosc pojazdu netto - w PLN,
+  kategoria pojazdu - osobowy, ciężarowy albo motocykl/inny,
+  sposob korzystania - prywatny/standardowy/nietaxi albo taxi,
+  typ silnika - benzynowy, diesel, elektryczny, hybryda albo CNG/LPG,
+  pojemnosc silnika - w cm3,
+  data nabycia,
+  data pierwszej rejestracji - dotyczy tylko pojazdów używanych,
+  planowana data rejestracji - dotyczy tylko pojazdów nowych,
+  wspolposiadacz - flaga, czy polisa wskazuje więcej niż jednego właściciela/posiadacza pojazdu,
+  imie wspolposiadacza,
+  nazwisko wspolposiadacza,
+  pesel wspolposiadacza,
+  adres wspolposiadacza,
+  pakiet ubezpieczeniowy - flaga, czy dokument dotyczy pakietu ubezpieczeniowego jako pojedynczego spójnego produktu/usługi, czy tylko listy produktów jak AC, NNW, Assistance, GAP albo Przedłużona Gwarancja,
+  rodzaj assistance - zakres ochrony: minimalny, tylko na Polskę, na Europę z wyszczególnieniem kilometrażu, inne lub brak,
+  towarzystwo ubezpieczeniowe - nazwa TU, które wystawiło polisę,
+  nr polisy - pełny alfanumeryczny kod/numer/id polisy,
+  data konca polisy,
+  cena przedluzonej gwarancji,
+  pochodzenie polisy,
+  rodzaj polisy,
+  data sprzedazy lubezpieczenia,
+  data sprzedazy wznowienia,
+  
+  Jedno z dwóch (cena pierwsza lub cena wznowienia):
+    - Jedno z dwóch (cena pakietu lub cena poszczególnych produktów, oba liczą się jako cena pierwsza):
+        - cena pakietu,
+        - ceny poszczególnych produktów:
+            - oc cena,
+            - ac cena,
+            - cena nnw,
+            - cena assistance,
+            - gap cena,
+    - cena wznowienia,
 
 Reguły normalizacji:
 - rocznik zwróć jako rok produkcji pojazdu.
@@ -117,6 +118,7 @@ PROMPT,
                     'Europa (500-700km)',
                     'Europa (1000km)',
                     'Europa (+1500km)',
+                    'Inny',
                     '',
                 ],
             ],
@@ -169,7 +171,6 @@ PROMPT,
                 ],
             ],
             'nr_polisy' => ['type' => 'string'],
-            'kategoria_tu' => ['type' => 'string', 'enum' => ['Partner InGreen', 'Asap', 'Wiktoria', '']],
             'data_konca_polisy' => ['type' => 'string'],
             'cena_pakietu' => ['type' => 'string'],
             'cena_wznowienia' => ['type' => 'string'],
@@ -226,7 +227,6 @@ PROMPT,
             'rodzaj_assistance',
             'towarzystwo_ubezpieczeniowe',
             'nr_polisy',
-            'kategoria_tu',
             'data_konca_polisy',
             'cena_pakietu',
             'cena_wznowienia',

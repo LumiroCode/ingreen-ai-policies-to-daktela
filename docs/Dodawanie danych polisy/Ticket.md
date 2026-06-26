@@ -32,12 +32,12 @@ Poniższe tylko dla samochodów marki Tesla
 - pakiet_ubezpieczeniowy: czy to jest cały pakiet ubezpieczeniowy czy tylko AC, NNW, Assistance, GAP, Przedłużona Gwarancja; tak/nie
 - rodzaj_assistance: minimalny / Polska / Europa (500-700km) / Europa ( 1000km) / Europa (+1500km)
 - towarzystwo_ubezpieczeniowe: Alianz / Aviva / AXA / Balcia / Benefia / Compensa / Concordia / Defend / Ergo Hestia / Ergo Hestia - Pakiet Dealerski / Ergo Hestia - Pakiet Dealerski polisa za 1zł / Euroins / Generali / Gothaer / HDI / Inne / Interrisk / Liberty Ubezpieczenia / Link4 / Met Life / MTU / NN Życie / Open Life / PKO Ubezpieczenia / Polisa - Życie / Polskie Towarzystwo Reasekuracji / Proama / PTU / PZM / PZU / PZU - pakiet dealerski SIGMA / RESO Europa / Saltus / Signal Iduna / TU Europa / TUW / TUZ / Uniqa / Vienna Life / Warta / Wefox / Wiener
-- kategoria_tu: kategoria towarzystwa ubezpieczeniowego; Partner InGreen / Asap / Wiktoria
+- ~~kategoria_tu: kategoria towarzystwa ubezpieczeniowego; Partner InGreen / Asap / Wiktoria~~ - wewnętrzne pole do ręcznego uzupełnienia przez konsultanta
 - data_konca_polisy: data końca polisy
 - cena_pakietu: Cena Pakietu pierwszy rok
 - data_sprzedazy_lubezpieczenia: Data sprzedaży ubezpieczenia pierwszy rok
-- cena_suma_skladek_online: NIE Z POLISY - POMIJAMY
-- cena_suma_skladek_online_promo: NIE Z POLISY - POMIJAMY
+- ~~cena_suma_skladek_online~~: NIE Z POLISY - POMIJAMY
+- ~~cena_suma_skladek_online_promo~~: NIE Z POLISY - POMIJAMY
 
 ### ~~Ubezpieczenia dodatkowe~~
 #OUT-OF-SCOPE
