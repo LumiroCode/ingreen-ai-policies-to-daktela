@@ -10,6 +10,7 @@ use Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyConfirmationForm;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataCache;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataExtractor;
+use Ingreen\DaktelaPolicy\PolicyExtraction\TicketPolicyDataWriter;
 use Ingreen\DaktelaPolicy\PolicyExtraction\TicketPolicyValuesProvider;
 use Ingreen\DaktelaPolicy\Support\AppException;
 use Throwable;
@@ -25,7 +26,8 @@ final class WebhookApp
         private readonly TicketPdfAttachments $ticketPdfAttachments,
         private readonly PolicyDataExtractor $policyDataExtractor,
         private readonly AppLogger $logger,
-        private readonly ?TicketPolicyValuesProvider $ticketPolicyValuesProvider = null
+        private readonly ?TicketPolicyValuesProvider $ticketPolicyValuesProvider = null,
+        private readonly ?TicketPolicyDataWriter $ticketPolicyDataWriter = null
     ) {
         $this->accessGuard = new WebhookAccessGuard($config, $tabSignatureVerifier, $logger);
         $this->policyDataCache = new PolicyDataCache($config->varDir);
@@ -376,6 +378,7 @@ final class WebhookApp
                 ]);
             }
 
+            $this->ticketPolicyDataWriter?->updateTicketPolicyData($ticketId, $extractedData);
             $this->policyDataCache->saveConfirmed($ticketId, $attachment, $extractedData);
             $this->policyDataCache->deletePending($ticketId, $attachment);
 
@@ -387,7 +390,9 @@ final class WebhookApp
                     $attachments,
                     [
                         'type' => 'success',
-                        'text' => 'Zaakceptowane wartości zostały zapisane do cache.',
+                        'text' => $this->ticketPolicyDataWriter === null
+                            ? 'Zaakceptowane wartości zostały zapisane do cache.'
+                            : 'Zaakceptowane wartości zostały zapisane do ticketa w Daktela.',
                     ],
                     $extractedData,
                     $attachmentIndex,
@@ -534,6 +539,7 @@ final class WebhookApp
             'attachment_is_not_pdf' => 'Wybrany załącznik nie jest poprawnym plikiem PDF.',
             'policy_temp_dir_failed', 'policy_temp_write_failed', 'policy_pdf_not_readable' => 'Nie udało się zapisać pliku polisy do odczytu.',
             'policy_data_storage_failed', 'policy_data_not_found' => 'Nie udało się zapisać potwierdzonych danych polisy.',
+            'daktela_ticket_policy_update_failed' => 'Nie udało się zapisać danych polisy do ticketa w Daktela.',
             'claude_policy_extraction_failed' => $this->claudePolicyExtractionErrorMessage($exception),
             'policy_extraction_parse_failed' => 'Claude zwrócił odpowiedź w nieoczekiwanym formacie.',
             default => 'Nie udało się przetworzyć pliku polisy.',

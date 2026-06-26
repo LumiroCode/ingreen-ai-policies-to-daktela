@@ -37,7 +37,14 @@ function tempDir(): string
     return $dir;
 }
 
-function app(FakeDaktela $fake, string $dir, ?string $allowedUtilityOrigin = null, ?string $utilitySecretKey = null, ?PolicyDataExtractor $extractor = null): WebhookApp
+function app(
+    FakeDaktela $fake,
+    string $dir,
+    ?string $allowedUtilityOrigin = null,
+    ?string $utilitySecretKey = null,
+    ?PolicyDataExtractor $extractor = null,
+    bool $writeTicketPolicyData = false
+): WebhookApp
 {
     $config = new AppConfig('https://daktela.example', 'api-token', null, $dir . '/var', $dir . '/cache', 1_000_000, $allowedUtilityOrigin, $utilitySecretKey);
 
@@ -50,7 +57,8 @@ function app(FakeDaktela $fake, string $dir, ?string $allowedUtilityOrigin = nul
         new TicketPdfAttachments($daktela, $logger, $config->cacheDir),
         $extractor ?? new FakePolicyDataExtractor(),
         $logger,
-        new DaktelaTicketPolicyValuesProvider($daktela, $logger)
+        new DaktelaTicketPolicyValuesProvider($daktela, $logger),
+        $writeTicketPolicyData ? $daktela : null
     );
 }
 

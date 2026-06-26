@@ -13,6 +13,8 @@ require_once __DIR__ . '/../Fakes/FakeClaudeMessagesClient.php';
 use Ingreen\DaktelaPolicy\WebhookApp;
 use Ingreen\DaktelaPolicy\Config\AppConfig;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaModule;
+use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaTicketPolicyDataMapper;
+use Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataParser;
 use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\ClaudePolicyDataExtractor;
 
@@ -53,6 +55,47 @@ test('Daktela module URL-encodes ticket name', function (): void {
 
     assertSameValue('ABC/123', $ticket['result']['name']);
     assertSameValue('https://daktela.example/api/v6/tickets/ABC%2F123', $fake->requests[0]['url']);
+});
+
+
+test('Daktela ticket policy data mapper maps non-empty policy values to custom fields', function (): void {
+    $data = ExtractedPolicyData::fromFields([
+        'marka' => ' Tesla ',
+        'model' => '',
+        'vin' => null,
+        'nr_polisy' => 'POL-123',
+    ], '{}');
+
+    $payload = (new DaktelaTicketPolicyDataMapper())->toTicketPayload($data);
+
+    assertSameValue(['marka' => 'Tesla', 'nr_polisy' => 'POL-123'], $payload['customFields']);
+    assertArrayMissingKey('model', $payload['customFields']);
+    assertArrayMissingKey('vin', $payload['customFields']);
+});
+
+
+test('Daktela module updates ticket policy data through form-encoded custom fields', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/ABC%2F123.json' => jsonResponse(['result' => ['name' => 'ABC/123']]),
+    ]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    $response = $module->updateTicketPolicyData('ABC/123', ExtractedPolicyData::fromFields([
+        'marka' => 'Tesla',
+        'model' => '',
+        'nr_polisy' => 'POL-123',
+    ], '{}'));
+    parse_str((string) $fake->requests[0]['body'], $body);
+
+    assertSameValue('ABC/123', $response['result']['name']);
+    assertSameValue('PUT', $fake->requests[0]['method']);
+    assertSameValue('https://daktela.example/api/v6/tickets/ABC%2F123.json', $fake->requests[0]['url']);
+    assertSameValue('application/json', $fake->requests[0]['headers']['Accept']);
+    assertSameValue('application/x-www-form-urlencoded', $fake->requests[0]['headers']['Content-Type']);
+    assertSameValue('module-token', $fake->requests[0]['headers']['X-AUTH-TOKEN-OPENAPI']);
+    assertSameValue('Tesla', $body['customFields']['marka']);
+    assertSameValue('POL-123', $body['customFields']['nr_polisy']);
+    assertArrayMissingKey('model', $body['customFields']);
 });
 
 

@@ -161,7 +161,7 @@ $vehicleNetValueFromGross = static function (?string $value) use ($vehicleValueA
                     type="checkbox"
                     <?= $allLocked ? 'checked' : '' ?>
                 >
-                <span>zachowaj wszystkie</span>
+                <span>wszystkie poprawne</span>
             </label>
 
             <?php foreach ($policyGroups as $groupIndex => $group): ?>
@@ -180,7 +180,7 @@ $vehicleNetValueFromGross = static function (?string $value) use ($vehicleValueA
                                 type="checkbox"
                                 <?= $groupLocked ? 'checked' : '' ?>
                             >
-                            <span>zachowaj grupę</span>
+                            <span>grupa poprawna</span>
                         </label>
                     </legend>
 
@@ -207,7 +207,7 @@ $vehicleNetValueFromGross = static function (?string $value) use ($vehicleValueA
                                             value="1"
                                             <?= $locked ? 'checked' : '' ?>
                                         >
-                                        <span>zachowaj</span>
+                                        <span>poprawne</span>
                                     </label>
                                 </div>
                                 <?php if ($key === 'wartosc_pojazdu_brutto'): ?>
@@ -237,9 +237,10 @@ $vehicleNetValueFromGross = static function (?string $value) use ($vehicleValueA
                                         <button
                                             class="policy-input-action policy-restore-ai-value"
                                             type="button"
-                                            data-policy-ai-value="<?= htmlspecialchars((string) ($row['value'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                            <?= $row['value'] ? 'data-policy-ai-value="' . htmlspecialchars((string) ($row['value'] ?? ''), ENT_QUOTES, 'UTF-8') . '"' : '' ?>
                                             title="Przywróć wartość odczytaną przez AI"
                                             aria-label="Przywróć wartość odczytaną przez AI dla pola <?= htmlspecialchars($row['label'], ENT_QUOTES, 'UTF-8') ?>"
+                                            <?= $row['value'] ? '' : 'disabled' ?>
                                         >AI</button>
                                         <button
                                             class="policy-input-action policy-clear-value"
@@ -272,13 +273,22 @@ $vehicleNetValueFromGross = static function (?string $value) use ($vehicleValueA
         <div class="policy-review-feedback status-message error" hidden></div>
 
         <div class="action-bar">
-            <button
+            <!-- <button
                 class="button primary"
                 type="submit"
                 name="confirmation"
                 value="yes"
                 <?= $allLocked ? '' : 'disabled' ?>
                 title="<?= $allLocked ? '' : 'Oznacz wszystkie pola jako do zachowania, aby móc zapisać dane polisy.' ?>"
+            >Zapisz</button> -->
+            <button
+                class="button primary"
+                type="submit"
+                name="confirmation"
+                value="yes"
+                <?= $allLocked ? '' : 'disabled' ?>
+                title="Przycisk wyłączony na czas dalszej implementacji."
+                disabled
             >Zapisz</button>
             <button
                 class="button secondary"

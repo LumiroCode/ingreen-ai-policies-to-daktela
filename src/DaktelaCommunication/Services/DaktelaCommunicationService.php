@@ -45,6 +45,32 @@ final class DaktelaCommunicationService
     }
 
     /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    public function putFormJson(string $path, array $data, string $errorCode = 'daktela_request_failed'): array
+    {
+        $response = $this->request('PUT', $this->buildUrl($path), $this->authHeaders([
+            'Accept' => 'application/json',
+            'Content-Type' => 'application/x-www-form-urlencoded',
+        ]), http_build_query($data));
+
+        $this->assertSuccessfulResponse($response, $path, $errorCode, [
+            'bodyPreview' => substr($response['body'], 0, 500),
+        ]);
+
+        $payload = json_decode($response['body'], true);
+
+        if (!is_array($payload)) {
+            throw new AppException(502, 'invalid_daktela_response', 'Daktela returned invalid JSON.', [
+                'path' => $path,
+            ]);
+        }
+
+        return $payload;
+    }
+
+    /**
      * @return array{body:string,contentType:?string}
      */
     public function download(string $file, int $maxBytes): array

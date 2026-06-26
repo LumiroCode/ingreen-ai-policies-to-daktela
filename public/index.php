@@ -38,7 +38,8 @@ try {
         new TicketPdfAttachments($daktela, $logger, $config->cacheDir),
         new ClaudePolicyDataExtractor(AnthropicClaudeMessagesClient::fromApiKey($config->claudeApiKey)),
         $logger,
-        new DaktelaTicketPolicyValuesProvider($daktela, $logger)
+        new DaktelaTicketPolicyValuesProvider($daktela, $logger),
+        $daktela
     );
 
     sendResponse($app->handle(

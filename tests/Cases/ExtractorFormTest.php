@@ -13,6 +13,7 @@ require_once __DIR__ . '/../Fakes/FakeClaudeMessagesClient.php';
 use Ingreen\DaktelaPolicy\WebhookApp;
 use Ingreen\DaktelaPolicy\Config\AppConfig;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaModule;
+use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataCache;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataParser;
 use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\ClaudePolicyDataExtractor;
 use Ingreen\DaktelaPolicy\Support\AppException;
@@ -64,8 +65,119 @@ test('policy confirmation form shows ticket custom field value without replacing
     assertTrueValue(str_contains($download['body'], 'data-policy-ai-value="LLM Tesla"'));
     assertTrueValue(str_contains($download['body'], '>AI</button>'));
     assertTrueValue(str_contains($download['body'], '>&times;</button>'));
+    assertTrueValue(str_contains($download['body'], 'name="ticket" value="123"'));
+    assertTrueValue(str_contains($download['body'], 'name="title" value="Policy ticket"'));
+    assertTrueValue(str_contains($download['body'], 'name="attachment" value="0"'));
+    assertTrueValue(str_contains($download['body'], 'name="access_token"'));
     assertTrueValue(!str_contains($download['body'], 'data-policy-apply-value="Model 3"'));
     assertTrueValue(!str_contains($download['body'], 'data-policy-apply-value="204000 PLN"'));
+});
+
+
+test('confirmed policy data is saved to Daktela ticket before confirmed cache', function (): void {
+    $dir = tempDir();
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/scan.pdf', 'title' => 'scan.pdf', 'type' => 'application/pdf'],
+                ],
+                'customFields' => [],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/api/v6/tickets/123.json' => jsonResponse(['result' => ['name' => '123']]),
+        '/files/scan.pdf' => pdfResponse(),
+    ]);
+    $app = app($fake, $dir, writeTicketPolicyData: true);
+
+    $extracted = $app->handle('123', '0', daktelaAccessToken('123'));
+    $confirmed = $app->handle(
+        '123',
+        '0',
+        daktelaAccessToken('123'),
+        confirmation: 'yes',
+        policyData: [
+            'stan_pojazdu' => 'Nowy',
+            'marka' => 'Manualna marka',
+            'model' => '',
+            'nr_polisy' => 'POL-123',
+        ],
+        policyLocked: \Ingreen\DaktelaPolicy\PolicyExtraction\PolicyConfirmationForm::allLockedFields()
+    );
+
+    $putRequest = null;
+    foreach ($fake->requests as $request) {
+        if ($request['method'] === 'PUT') {
+            $putRequest = $request;
+            break;
+        }
+    }
+
+    if ($putRequest === null) {
+        throw new RuntimeException('Expected Daktela ticket update request.');
+    }
+
+    parse_str((string) $putRequest['body'], $body);
+    $cache = new PolicyDataCache($dir . '/var');
+    $attachment = ['file' => '/files/scan.pdf', 'title' => 'scan.pdf', 'type' => 'application/pdf'];
+
+    assertSameValue(200, $extracted['status']);
+    assertSameValue(200, $confirmed['status']);
+    assertTrueValue(str_contains($confirmed['body'], 'Zaakceptowane wartości zostały zapisane do ticketa w Daktela.'));
+    assertSameValue('https://daktela.example/api/v6/tickets/123.json', $putRequest['url']);
+    assertSameValue('Manualna marka', $body['customFields']['marka']);
+    assertSameValue('POL-123', $body['customFields']['nr_polisy']);
+    assertArrayMissingKey('model', $body['customFields']);
+    assertSameValue('Manualna marka', $cache->confirmed('123', $attachment)?->field('marka'));
+    assertSameValue(null, $cache->pending('123', $attachment));
+});
+
+
+test('Daktela ticket update failure preserves confirmation form and does not save confirmed cache', function (): void {
+    $dir = tempDir();
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/scan.pdf', 'title' => 'scan.pdf', 'type' => 'application/pdf'],
+                ],
+                'customFields' => [],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/api/v6/tickets/123.json' => jsonResponse(['error' => [['message' => 'failed']]], 500),
+        '/files/scan.pdf' => pdfResponse(),
+    ]);
+    $app = app($fake, $dir, writeTicketPolicyData: true);
+
+    $extracted = $app->handle('123', '0', daktelaAccessToken('123'));
+    $failed = $app->handle(
+        '123',
+        '0',
+        daktelaAccessToken('123'),
+        confirmation: 'yes',
+        policyData: [
+            'marka' => 'Manualna marka',
+            'nr_polisy' => 'POL-123',
+        ],
+        policyLocked: \Ingreen\DaktelaPolicy\PolicyExtraction\PolicyConfirmationForm::allLockedFields()
+    );
+
+    $cache = new PolicyDataCache($dir . '/var');
+    $attachment = ['file' => '/files/scan.pdf', 'title' => 'scan.pdf', 'type' => 'application/pdf'];
+
+    assertSameValue(200, $extracted['status']);
+    assertSameValue(502, $failed['status']);
+    assertTrueValue(str_contains($failed['body'], 'Nie udało się zapisać danych polisy do ticketa w Daktela.'));
+    assertTrueValue(str_contains($failed['body'], 'value="Manualna marka"'));
+    assertTrueValue(str_contains($failed['body'], 'value="POL-123"'));
+    assertSameValue(null, $cache->confirmed('123', $attachment));
+    assertSameValue('Skoda', $cache->pending('123', $attachment)?->field('marka'));
 });
 
 

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 final class FakeDaktela
 {
-    /** @var list<array{method:string,url:string,headers:array<string,string>}> */
+    /** @var list<array{method:string,url:string,headers:array<string,string>,body:?string}> */
     public array $requests = [];
 
     /**
@@ -19,7 +19,7 @@ final class FakeDaktela
      */
     public function __invoke(string $method, string $url, array $headers, ?string $body = null): array
     {
-        $this->requests[] = ['method' => $method, 'url' => $url, 'headers' => $headers];
+        $this->requests[] = ['method' => $method, 'url' => $url, 'headers' => $headers, 'body' => $body];
         $path = parse_url($url, PHP_URL_PATH) ?: '/';
         $route = $this->routes[$path] ?? ['status' => 404, 'headers' => ['Content-Type' => 'application/json'], 'body' => '{}'];
 

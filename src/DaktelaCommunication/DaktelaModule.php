@@ -9,10 +9,13 @@ use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\FindCrmRecordIdentifiers
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\GetCrmRecordsByTicketId;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\GetTicketByName;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\GetTicketAttachments;
+use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\UpdateTicketPolicyData;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
+use Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData;
+use Ingreen\DaktelaPolicy\PolicyExtraction\TicketPolicyDataWriter;
 use Ingreen\DaktelaPolicy\TicketAttachmentProvider;
 
-final class DaktelaModule implements TicketAttachmentProvider
+final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataWriter
 {
     private const POLICY_CRM_RECORD_TITLE = 'Polisy';
     private const VEHICLE_CRM_RECORD_TITLE = 'Pojazdy';
@@ -22,6 +25,7 @@ final class DaktelaModule implements TicketAttachmentProvider
     private readonly GetCrmRecordsByTicketId $getCrmRecordsByTicketId;
     private readonly GetTicketByName $getTicketByName;
     private readonly GetTicketAttachments $getTicketAttachments;
+    private readonly UpdateTicketPolicyData $updateTicketPolicyData;
 
     /**
      * @param null|callable(string, string, array<string, string>, ?string): array{status:int,headers:array<string,string>,body:string} $requester
@@ -37,6 +41,7 @@ final class DaktelaModule implements TicketAttachmentProvider
         $this->findCrmRecordIdentifiersByTitle = new FindCrmRecordIdentifiersByTitle($this->getCrmRecordsByTicketId);
         $this->getTicketByName = new GetTicketByName($this->service);
         $this->getTicketAttachments = new GetTicketAttachments($this->service, $logger);
+        $this->updateTicketPolicyData = new UpdateTicketPolicyData($this->service);
     }
 
     /**
@@ -45,6 +50,14 @@ final class DaktelaModule implements TicketAttachmentProvider
     public function getTicketByName(string $name): array
     {
         return $this->getTicketByName->execute($name);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function updateTicketPolicyData(string $ticketId, ExtractedPolicyData $data): array
+    {
+        return $this->updateTicketPolicyData->execute($ticketId, $data);
     }
 
     /**
