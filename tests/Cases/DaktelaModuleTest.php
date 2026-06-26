@@ -197,6 +197,63 @@ test('Daktela module finds policy CRM record identifiers by registration number 
 });
 
 
+test('Daktela module finds vehicle CRM record identifiers by registration number or VIN', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/crmRecords' => jsonResponse([
+            'result' => [
+                'data' => [
+                    [
+                        'name' => 'record_policy',
+                        'title' => 'Polisy',
+                        'ticket' => ['name' => 'ABC/123'],
+                        'customFields' => [
+                            'nr_rejestracyjny' => 'WX12345',
+                            'vin' => 'TMB123',
+                        ],
+                    ],
+                    [
+                        'name' => 'record_vehicle_registration',
+                        'title' => 'Pojazdy',
+                        'ticket' => ['name' => 'ABC/123'],
+                        'customFields' => [
+                            'nr_rejestracyjny' => ' wx12345 ',
+                            'vin' => 'OTHER',
+                        ],
+                    ],
+                    [
+                        'name' => 'record_vehicle_vin',
+                        'title' => 'Pojazdy',
+                        'ticket' => ['name' => 'ABC/123'],
+                        'customFields' => [
+                            'nr_rejestracyjny' => 'OTHER',
+                            'vin' => ' tmb123 ',
+                        ],
+                    ],
+                    [
+                        'name' => 'record_vehicle_bad_fields',
+                        'title' => 'Pojazdy',
+                        'ticket' => ['name' => 'ABC/123'],
+                        'customFields' => [
+                            'nr_rejestracyjny' => ['WX12345'],
+                            'vin' => ['TMB123'],
+                        ],
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    $recordIdentifiers = $module->findVehicleCrmRecordIdentifiers('ABC/123', 'WX12345', 'TMB123');
+    parse_str(parse_url($fake->requests[0]['url'], PHP_URL_QUERY) ?: '', $query);
+
+    assertSameValue(['record_vehicle_registration', 'record_vehicle_vin'], $recordIdentifiers);
+    assertSameValue('ticket.name', $query['filter']['field']);
+    assertSameValue('eq', $query['filter']['operator']);
+    assertSameValue('ABC/123', $query['filter']['value']);
+});
+
+
 test('Daktela module returns empty policy CRM record identifier list when nothing matches', function (): void {
     $fake = new FakeDaktela([
         '/api/v6/crmRecords' => jsonResponse([
@@ -222,6 +279,31 @@ test('Daktela module returns empty policy CRM record identifier list when nothin
 });
 
 
+test('Daktela module returns empty vehicle CRM record identifier list when nothing matches', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/crmRecords' => jsonResponse([
+            'result' => [
+                'data' => [
+                    [
+                        'name' => 'record_vehicle',
+                        'title' => 'Pojazdy',
+                        'customFields' => [
+                            'nr_rejestracyjny' => 'WA98765',
+                            'vin' => 'OTHER',
+                        ],
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    $recordIdentifiers = $module->findVehicleCrmRecordIdentifiers('123', 'WX12345', 'TMB123');
+
+    assertSameValue([], $recordIdentifiers);
+});
+
+
 test('Daktela module rejects empty policy CRM lookup values', function (): void {
     $fake = new FakeDaktela([]);
     $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
@@ -240,6 +322,24 @@ test('Daktela module rejects empty policy CRM lookup values', function (): void 
 });
 
 
+test('Daktela module rejects empty vehicle CRM lookup values', function (): void {
+    $fake = new FakeDaktela([]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    try {
+        $module->findVehicleCrmRecordIdentifiers('123', ' ', 'TMB123');
+    } catch (\Ingreen\DaktelaPolicy\Support\AppException $exception) {
+        assertSameValue(400, $exception->statusCode());
+        assertSameValue('invalid_vehicle_crm_lookup_arguments', $exception->errorCode());
+        assertSameValue('registrationNumber', $exception->details()['field']);
+        assertSameValue(0, count($fake->requests));
+        return;
+    }
+
+    throw new RuntimeException('Expected exception.');
+});
+
+
 test('Daktela module rejects empty policy CRM lookup VIN', function (): void {
     $fake = new FakeDaktela([]);
     $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
@@ -249,6 +349,24 @@ test('Daktela module rejects empty policy CRM lookup VIN', function (): void {
     } catch (\Ingreen\DaktelaPolicy\Support\AppException $exception) {
         assertSameValue(400, $exception->statusCode());
         assertSameValue('invalid_policy_crm_lookup_arguments', $exception->errorCode());
+        assertSameValue('vin', $exception->details()['field']);
+        assertSameValue(0, count($fake->requests));
+        return;
+    }
+
+    throw new RuntimeException('Expected exception.');
+});
+
+
+test('Daktela module rejects empty vehicle CRM lookup VIN', function (): void {
+    $fake = new FakeDaktela([]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    try {
+        $module->findVehicleCrmRecordIdentifiers('123', 'WX12345', ' ');
+    } catch (\Ingreen\DaktelaPolicy\Support\AppException $exception) {
+        assertSameValue(400, $exception->statusCode());
+        assertSameValue('invalid_vehicle_crm_lookup_arguments', $exception->errorCode());
         assertSameValue('vin', $exception->details()['field']);
         assertSameValue(0, count($fake->requests));
         return;
@@ -283,6 +401,39 @@ test('Daktela module rejects matched policy CRM record without writable identifi
         assertSameValue('invalid_daktela_response', $exception->errorCode());
         assertSameValue('/api/v6/crmRecords', $exception->details()['path']);
         assertSameValue('123', $exception->details()['ticketId']);
+        return;
+    }
+
+    throw new RuntimeException('Expected exception.');
+});
+
+
+test('Daktela module rejects matched vehicle CRM record without writable identifier', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/crmRecords' => jsonResponse([
+            'result' => [
+                'data' => [
+                    [
+                        'title' => 'Pojazdy',
+                        'customFields' => [
+                            'nr_rejestracyjny' => 'WX12345',
+                            'vin' => 'TMB123',
+                        ],
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    try {
+        $module->findVehicleCrmRecordIdentifiers('123', 'WX12345', 'TMB123');
+    } catch (\Ingreen\DaktelaPolicy\Support\AppException $exception) {
+        assertSameValue(502, $exception->statusCode());
+        assertSameValue('invalid_daktela_response', $exception->errorCode());
+        assertSameValue('/api/v6/crmRecords', $exception->details()['path']);
+        assertSameValue('123', $exception->details()['ticketId']);
+        assertSameValue('Pojazdy', $exception->details()['recordTitle']);
         return;
     }
 
@@ -419,4 +570,3 @@ test('Daktela module rejects invalid JSON response', function (): void {
 
     throw new RuntimeException('Expected exception.');
 });
-

@@ -9,10 +9,8 @@ use Ingreen\DaktelaPolicy\Support\AppException;
 /**
  * @internal
  */
-final class FindPolicyCrmRecordIdentifiers
+final class FindCrmRecordIdentifiersByTitle
 {
-    private const POLICY_RECORD_TITLE = 'Polisy';
-
     public function __construct(private readonly GetCrmRecordsByTicketId $getCrmRecordsByTicketId)
     {
     }
@@ -22,30 +20,45 @@ final class FindPolicyCrmRecordIdentifiers
      *
      * @return list<string> Daktela CRM record identifiers from record.name.
      */
-    public function execute(string $ticketId, string $registrationNumber, string $vin): array
-    {
-        $registrationNumber = $this->requiredLookupValue($registrationNumber, 'registrationNumber');
-        $vin = $this->requiredLookupValue($vin, 'vin');
+    public function execute(
+        string $ticketId,
+        string $recordTitle,
+        string $registrationNumber,
+        string $vin,
+        string $invalidLookupErrorCode,
+        string $invalidLookupMessage
+    ): array {
+        $registrationNumber = $this->requiredLookupValue(
+            $registrationNumber,
+            'registrationNumber',
+            $invalidLookupErrorCode,
+            $invalidLookupMessage
+        );
+        $vin = $this->requiredLookupValue($vin, 'vin', $invalidLookupErrorCode, $invalidLookupMessage);
 
         $recordIdentifiers = [];
 
         foreach ($this->getCrmRecordsByTicketId->execute($ticketId) as $record) {
-            if (!$this->isMatchingPolicyRecord($record, $registrationNumber, $vin)) {
+            if (!$this->isMatchingRecord($record, $recordTitle, $registrationNumber, $vin)) {
                 continue;
             }
 
-            $recordIdentifiers[] = $this->recordIdentifier($record, $ticketId);
+            $recordIdentifiers[] = $this->recordIdentifier($record, $ticketId, $recordTitle);
         }
 
         return $recordIdentifiers;
     }
 
-    private function requiredLookupValue(string $value, string $field): string
-    {
+    private function requiredLookupValue(
+        string $value,
+        string $field,
+        string $errorCode,
+        string $message
+    ): string {
         $value = trim($value);
 
         if ($value === '') {
-            throw new AppException(400, 'invalid_policy_crm_lookup_arguments', 'Policy CRM lookup requires registration number and VIN.', [
+            throw new AppException(400, $errorCode, $message, [
                 'field' => $field,
             ]);
         }
@@ -56,9 +69,9 @@ final class FindPolicyCrmRecordIdentifiers
     /**
      * @param array<string,mixed> $record
      */
-    private function isMatchingPolicyRecord(array $record, string $registrationNumber, string $vin): bool
+    private function isMatchingRecord(array $record, string $recordTitle, string $registrationNumber, string $vin): bool
     {
-        if (($record['title'] ?? null) !== self::POLICY_RECORD_TITLE) {
+        if (($record['title'] ?? null) !== $recordTitle) {
             return false;
         }
 
@@ -101,7 +114,7 @@ final class FindPolicyCrmRecordIdentifiers
     /**
      * @param array<string,mixed> $record
      */
-    private function recordIdentifier(array $record, string $ticketId): string
+    private function recordIdentifier(array $record, string $ticketId, string $recordTitle): string
     {
         $recordIdentifier = $this->scalarString($record['name'] ?? null);
 
@@ -109,7 +122,7 @@ final class FindPolicyCrmRecordIdentifiers
             throw new AppException(502, 'invalid_daktela_response', 'Matched Daktela CRM record has no writable identifier.', [
                 'path' => '/api/v6/crmRecords',
                 'ticketId' => $ticketId,
-                'recordTitle' => self::POLICY_RECORD_TITLE,
+                'recordTitle' => $recordTitle,
             ]);
         }
 
