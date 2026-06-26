@@ -117,8 +117,6 @@ final class PolicyDataResponseParser
         'cena przedluzonej gwarancji' => 'cena_przedluzonej_gwarancji',
         'cena przedłużonej gwarancji' => 'cena_przedluzonej_gwarancji',
         'cena_przedluzonej_gwarancji' => 'cena_przedluzonej_gwarancji',
-        'pochodzenie polisy' => 'pochodzenie_polisy',
-        'pochodzenie_polisy' => 'pochodzenie_polisy',
         'rodzaj polisy' => 'rodzaj_polisy',
         'rodzaj_polisy' => 'rodzaj_polisy',
         'data sprzedazy ubezpieczenia' => 'data_sprzedazy_lubezpieczenia',

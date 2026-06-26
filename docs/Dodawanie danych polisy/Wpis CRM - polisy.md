@@ -27,7 +27,7 @@ Dane bierzemy z polisy i z ticketa. Zanim wrzucimy dane do rekordu CRM, zaktuali
     - cena_assistance: ? (z ticketu) / alternatywna dla ceny pakietu pierwszy rok
     - gap_cena: ? (z ticketu) / alternatywna dla ceny pakietu pierwszy rok
     - cena_przedluzonej_gwarancji: ? (z ticketu) / alternatywna dla ceny pakietu pierwszy rok
-    - pochodzenie_polisy: ? (z ticketu)
+    - ~~pochodzenie_polisy~~: pole wewnętrzne do ręcznego uzupełnienia przez konsultanta
     - rodzaj_polisy: Wybór z listy OC, OC/AC, OC/AC/NNW, OC/AC/NNW/Assistance, AC, NNW, Assistance, GAP, Przedłużona Gwarancja
     - data_konca_polisy: data końca polisy
     - data_sprzedazy_lubezpieczenia: Data sprzedaży ubezpieczenia pierwszy rok / LUB

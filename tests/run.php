@@ -957,7 +957,6 @@ test('configured utility origin allows signed in-app attachment request', functi
     assertTrueValue(str_contains($download['body'], 'name="policy_data[cena_assistance]"'));
     assertTrueValue(str_contains($download['body'], 'name="policy_data[gap_cena]"'));
     assertTrueValue(str_contains($download['body'], 'name="policy_data[cena_przedluzonej_gwarancji]"'));
-    assertTrueValue(str_contains($download['body'], 'name="policy_data[pochodzenie_polisy]"'));
     assertTrueValue(str_contains($download['body'], 'name="policy_data[rodzaj_polisy]"'));
     assertTrueValue(str_contains($download['body'], 'name="policy_data[data_sprzedazy_wznowienia]"'));
     assertTrueValue(str_contains($download['body'], 'scan.pdf'));
@@ -1874,7 +1873,7 @@ test('app logger writes JSON lines to configured log file', function (): void {
 
 test('policy data parser maps Claude JSON response to extracted policy data', function (): void {
     $data = (new PolicyDataResponseParser())->parse('```json
-{"stan_pojazdu":"Używany","nr_rejestracyjny":"WX12345","marka":"Toyota","model":"Corolla","wersja":"Comfort","vin":"JT123","forma_wlasnosci":"Leasing","rocznik":"2022","przebieg":"12000","wartosc_pojazdu_brutto":"123 000 PLN","wartosc_pojazdu_netto":null,"kategoria_pojazdu":"Osobowy (Kat. M1)","sposob_korzystania":"Standardowy","typ_silnika":"Hybryda","pojemnosc_silnika":"1798","data_nabycia":"2024-01-01","data_pierwszej_rejestracji":"2022-03-01","planowana_data_rejestracji":null,"wspolposiadacz":"tak","imie_wspolposiadacza":"Jan","nazwisko_wspolposiadacza":"Kowalski","pesel_wspolposiadacza":"80010112345","adres_wspolposiadacza":"ul. Prosta 1, Warszawa","pakiet_ubezpieczeniowy":"tak","rodzaj_assistance":"Polska","towarzystwo_ubezpieczeniowe":"PZU","nr_polisy":"POL-123","data_konca_polisy":"2025-03-01","cena_pakietu":"3200 PLN","cena_wznowienia":"3300 PLN","oc_cena":"100 PLN","ac_cena":"2100 PLN","cena_nnw":"50 PLN","cena_assistance":"80 PLN","gap_cena":"900 PLN","cena_przedluzonej_gwarancji":"1200 PLN","pochodzenie_polisy":"Dealer","rodzaj_polisy":"OC/AC/NNW/Assistance","data_sprzedazy_lubezpieczenia":"2024-03-01","data_sprzedazy_wznowienia":"2025-02-20"}
+{"stan_pojazdu":"Używany","nr_rejestracyjny":"WX12345","marka":"Toyota","model":"Corolla","wersja":"Comfort","vin":"JT123","forma_wlasnosci":"Leasing","rocznik":"2022","przebieg":"12000","wartosc_pojazdu_brutto":"123 000 PLN","wartosc_pojazdu_netto":null,"kategoria_pojazdu":"Osobowy (Kat. M1)","sposob_korzystania":"Standardowy","typ_silnika":"Hybryda","pojemnosc_silnika":"1798","data_nabycia":"2024-01-01","data_pierwszej_rejestracji":"2022-03-01","planowana_data_rejestracji":null,"wspolposiadacz":"tak","imie_wspolposiadacza":"Jan","nazwisko_wspolposiadacza":"Kowalski","pesel_wspolposiadacza":"80010112345","adres_wspolposiadacza":"ul. Prosta 1, Warszawa","pakiet_ubezpieczeniowy":"tak","rodzaj_assistance":"Polska","towarzystwo_ubezpieczeniowe":"PZU","nr_polisy":"POL-123","data_konca_polisy":"2025-03-01","cena_pakietu":"3200 PLN","cena_wznowienia":"3300 PLN","oc_cena":"100 PLN","ac_cena":"2100 PLN","cena_nnw":"50 PLN","cena_assistance":"80 PLN","gap_cena":"900 PLN","cena_przedluzonej_gwarancji":"1200 PLN","rodzaj_polisy":"OC/AC/NNW/Assistance","data_sprzedazy_lubezpieczenia":"2024-03-01","data_sprzedazy_wznowienia":"2025-02-20"}
 ```');
 
     assertSameValue('Toyota', $data->carMake);
@@ -1901,7 +1900,6 @@ test('policy data parser maps Claude JSON response to extracted policy data', fu
     assertSameValue('80 PLN', $data->field('cena_assistance'));
     assertSameValue('900 PLN', $data->field('gap_cena'));
     assertSameValue('1200 PLN', $data->field('cena_przedluzonej_gwarancji'));
-    assertSameValue('Dealer', $data->field('pochodzenie_polisy'));
     assertSameValue('OC/AC/NNW/Assistance', $data->field('rodzaj_polisy'));
     assertSameValue('2025-02-20', $data->field('data_sprzedazy_wznowienia'));
 });
@@ -1935,7 +1933,6 @@ Cena NNW: 40 PLN
 Cena assistance: 70 PLN
 GAP cena: 800 PLN
 Cena przedłużonej gwarancji: /
-Pochodzenie polisy: Wznowienie
 Rodzaj polisy: OC/AC
 Data sprzedaży wznowienia: 2026-05-01
 ');
@@ -1959,7 +1956,6 @@ Data sprzedaży wznowienia: 2026-05-01
     assertSameValue('70 PLN', $data->field('cena_assistance'));
     assertSameValue('800 PLN', $data->field('gap_cena'));
     assertSameValue(null, $data->field('cena_przedluzonej_gwarancji'));
-    assertSameValue('Wznowienie', $data->field('pochodzenie_polisy'));
     assertSameValue('OC/AC', $data->field('rodzaj_polisy'));
     assertSameValue('2026-05-01', $data->field('data_sprzedazy_wznowienia'));
 });
