@@ -398,7 +398,7 @@ final class WebhookApp
                     [
                         'type' => 'success',
                         'text' => $this->confirmedPolicyDataWriter !== null
-                            ? 'Zaakceptowane wartości zostały zapisane do ticketa i rekordu CRM polisy w Daktela.'
+                            ? 'Zaakceptowane wartości zostały zapisane do ticketa oraz rekordów CRM polisy i pojazdu w Daktela.'
                             : ($this->ticketPolicyDataWriter === null
                             ? 'Zaakceptowane wartości zostały zapisane do cache.'
                             : 'Zaakceptowane wartości zostały zapisane do ticketa w Daktela.'),
@@ -552,6 +552,8 @@ final class WebhookApp
             'invalid_policy_crm_lookup_arguments' => 'Dane dla rekordu CRM polisy nie zostały zapisane. Uzupełnij numer rejestracyjny pojazdu i VIN w formularzu, a następnie spróbuj ponownie.',
             'multiple_policy_crm_records_found' => 'Dane dla rekordu CRM polisy nie zostały zapisane. Znaleziono więcej niż jeden pasujący rekord CRM polisy dla numeru rejestracyjnego lub VIN. Usuń zbędne rekordy CRM polis tak, aby pozostał tylko jeden, a następnie spróbuj ponownie.',
             'daktela_policy_crm_save_failed' => 'Nie udało się zapisać danych do rekordu CRM polisy w Daktela.',
+            'multiple_vehicle_crm_records_found' => 'Dane dla rekordu CRM pojazdu nie zostały zapisane. Znaleziono więcej niż jeden pasujący rekord CRM pojazdu dla numeru rejestracyjnego lub VIN. Usuń zbędne rekordy CRM pojazdów tak, aby pozostał tylko jeden, a następnie spróbuj ponownie.',
+            'daktela_vehicle_crm_save_failed' => 'Nie udało się zapisać danych do rekordu CRM pojazdu w Daktela.',
             'claude_policy_extraction_failed' => $this->claudePolicyExtractionErrorMessage($exception),
             'policy_extraction_parse_failed' => 'Claude zwrócił odpowiedź w nieoczekiwanym formacie.',
             default => 'Nie udało się przetworzyć pliku polisy.',
