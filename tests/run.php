@@ -1820,30 +1820,43 @@ test('Claude policy extractor sends PDF document and prompt to Claude client', f
     assertTrueValue($client->requests[0]['messages'][0]['content'][1] instanceof TextBlockParam);
     assertSameValue(null, $client->requests[0]['thinking']);
     assertSameValue('json_schema', $client->requests[0]['outputConfig']['format']['type']);
-    assertSameValue(false, $client->requests[0]['outputConfig']['format']['schema']['additionalProperties']);
-    assertSameValue(['string', 'null'], $client->requests[0]['outputConfig']['format']['schema']['properties']['nr_rejestracyjny']['type']);
-    assertSameValue(['string', 'null'], $client->requests[0]['outputConfig']['format']['schema']['properties']['marka']['type']);
-    assertSameValue(['Własny', 'Leasing', 'Bank', 'Wynajem'], $client->requests[0]['outputConfig']['format']['schema']['properties']['forma_wlasnosci']['anyOf'][0]['enum']);
-    assertSameValue(['Standardowy', 'Taxi'], $client->requests[0]['outputConfig']['format']['schema']['properties']['sposob_korzystania']['anyOf'][0]['enum']);
-    assertSameValue('null', $client->requests[0]['outputConfig']['format']['schema']['properties']['sposob_korzystania']['anyOf'][1]['type']);
-    assertSameValue(['Nowy', 'Używany', 'Nieznany'], $client->requests[0]['outputConfig']['format']['schema']['properties']['stan_pojazdu']['anyOf'][0]['enum']);
-    assertSameValue('null', $client->requests[0]['outputConfig']['format']['schema']['properties']['stan_pojazdu']['anyOf'][1]['type']);
-    assertSameValue(['tak', 'nie'], $client->requests[0]['outputConfig']['format']['schema']['properties']['pakiet_ubezpieczeniowy']['anyOf'][0]['enum']);
-    assertSameValue(['tak', 'nie'], $client->requests[0]['outputConfig']['format']['schema']['properties']['wspolposiadacz']['anyOf'][0]['enum']);
-    assertTrueValue(in_array('PZU', $client->requests[0]['outputConfig']['format']['schema']['properties']['towarzystwo_ubezpieczeniowe']['anyOf'][0]['enum'], true));
-    assertSameValue(['string', 'null'], $client->requests[0]['outputConfig']['format']['schema']['properties']['nr_polisy']['type']);
-    assertSameValue(['Partner InGreen', 'Asap', 'Wiktoria'], $client->requests[0]['outputConfig']['format']['schema']['properties']['kategoria_tu']['anyOf'][0]['enum']);
-    assertSameValue(['string', 'null'], $client->requests[0]['outputConfig']['format']['schema']['properties']['cena_wznowienia']['type']);
-    assertSameValue(['OC', 'OC/AC', 'OC/AC/NNW', 'OC/AC/NNW/Assistance', 'AC', 'NNW', 'Assistance', 'GAP', 'Przedłużona Gwarancja'], $client->requests[0]['outputConfig']['format']['schema']['properties']['rodzaj_polisy']['anyOf'][0]['enum']);
-    assertTrueValue(in_array('nr_rejestracyjny', $client->requests[0]['outputConfig']['format']['schema']['required'], true));
-    assertTrueValue(in_array('forma_wlasnosci', $client->requests[0]['outputConfig']['format']['schema']['required'], true));
-    assertTrueValue(in_array('planowana_data_rejestracji', $client->requests[0]['outputConfig']['format']['schema']['required'], true));
-    assertTrueValue(in_array('wspolposiadacz', $client->requests[0]['outputConfig']['format']['schema']['required'], true));
-    assertTrueValue(in_array('pesel_wspolposiadacza', $client->requests[0]['outputConfig']['format']['schema']['required'], true));
-    assertTrueValue(in_array('nr_polisy', $client->requests[0]['outputConfig']['format']['schema']['required'], true));
-    assertTrueValue(in_array('rodzaj_polisy', $client->requests[0]['outputConfig']['format']['schema']['required'], true));
-    assertTrueValue(in_array('data_sprzedazy_lubezpieczenia', $client->requests[0]['outputConfig']['format']['schema']['required'], true));
-    assertTrueValue(in_array('data_sprzedazy_wznowienia', $client->requests[0]['outputConfig']['format']['schema']['required'], true));
+    $schema = $client->requests[0]['outputConfig']['format']['schema'];
+    assertSameValue(false, $schema['additionalProperties']);
+    assertSameValue('string', $schema['properties']['nr_rejestracyjny']['type']);
+    assertSameValue('string', $schema['properties']['marka']['type']);
+    assertSameValue(['Własny', 'Leasing', 'Bank', 'Wynajem', ''], $schema['properties']['forma_wlasnosci']['enum']);
+    assertSameValue(['Standardowy', 'Taxi', ''], $schema['properties']['sposob_korzystania']['enum']);
+    assertSameValue(['Nowy', 'Używany', 'Nieznany', ''], $schema['properties']['stan_pojazdu']['enum']);
+    assertSameValue(['tak', 'nie', ''], $schema['properties']['pakiet_ubezpieczeniowy']['enum']);
+    assertSameValue(['tak', 'nie', ''], $schema['properties']['wspolposiadacz']['enum']);
+    assertTrueValue(in_array('PZU', $schema['properties']['towarzystwo_ubezpieczeniowe']['enum'], true));
+    assertSameValue('string', $schema['properties']['nr_polisy']['type']);
+    assertSameValue(['Partner InGreen', 'Asap', 'Wiktoria', ''], $schema['properties']['kategoria_tu']['enum']);
+    assertSameValue('string', $schema['properties']['cena_wznowienia']['type']);
+    assertSameValue(['OC', 'OC/AC', 'OC/AC/NNW', 'OC/AC/NNW/Assistance', 'AC', 'NNW', 'Assistance', 'GAP', 'Przedłużona Gwarancja', ''], $schema['properties']['rodzaj_polisy']['enum']);
+    $unionCount = static function (mixed $value) use (&$unionCount): int {
+        if (!is_array($value)) {
+            return 0;
+        }
+
+        $count = array_key_exists('anyOf', $value) || (isset($value['type']) && is_array($value['type'])) ? 1 : 0;
+
+        foreach ($value as $child) {
+            $count += $unionCount($child);
+        }
+
+        return $count;
+    };
+    assertSameValue(0, $unionCount($schema));
+    assertTrueValue(in_array('nr_rejestracyjny', $schema['required'], true));
+    assertTrueValue(in_array('forma_wlasnosci', $schema['required'], true));
+    assertTrueValue(in_array('planowana_data_rejestracji', $schema['required'], true));
+    assertTrueValue(in_array('wspolposiadacz', $schema['required'], true));
+    assertTrueValue(in_array('pesel_wspolposiadacza', $schema['required'], true));
+    assertTrueValue(in_array('nr_polisy', $schema['required'], true));
+    assertTrueValue(in_array('rodzaj_polisy', $schema['required'], true));
+    assertTrueValue(in_array('data_sprzedazy_lubezpieczenia', $schema['required'], true));
+    assertTrueValue(in_array('data_sprzedazy_wznowienia', $schema['required'], true));
     assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'nr_rejestracyjny'));
     assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'stan_pojazdu'));
     assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'forma_wlasnosci'));
@@ -1852,6 +1865,7 @@ test('Claude policy extractor sends PDF document and prompt to Claude client', f
     assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'nr_polisy'));
     assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'rodzaj_polisy'));
     assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'Nie wymyślaj danych'));
+    assertTrueValue(str_contains($client->requests[0]['messages'][0]['content'][1]->text, 'pustego stringa ""'));
 });
 
 echo "\nAll tests passed.\n";
