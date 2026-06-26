@@ -278,22 +278,13 @@ $vehicleNetValueFromGross = static function (?string $value) use ($vehicleValueA
         <div class="policy-review-feedback status-message error" hidden></div>
 
         <div class="action-bar">
-            <!-- <button
-                class="button primary"
-                type="submit"
-                name="confirmation"
-                value="yes"
-                <?= $allLocked ? '' : 'disabled' ?>
-                title="<?= $allLocked ? '' : 'Oznacz wszystkie pola jako do zachowania, aby móc zapisać dane polisy.' ?>"
-            >Zapisz</button> -->
             <button
                 class="button primary"
                 type="submit"
                 name="confirmation"
                 value="yes"
-                <?= $allRequiredLocked ? '' : 'disabled' ?>
-                title="Przycisk wyłączony na czas dalszej implementacji."
-                disabled
+                <?= $allLocked ? '' : 'disabled' ?>
+                title="<?= $allLocked ? '' : 'Oznacz wszystkie niepuste pola jako poprawne lub skasuj ich wartość, aby móc zapisać dane.' ?>"
             >Zapisz</button>
             <button
                 class="button secondary"
