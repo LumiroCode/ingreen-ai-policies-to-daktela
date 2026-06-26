@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Ingreen\DaktelaPolicy\Config\AppConfig;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaModule;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaTabSignatureVerifier;
+use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaTicketPolicyValuesProvider;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\Logging\DailyLogPaths;
 use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\AnthropicClaudeMessagesClient;
@@ -36,7 +37,8 @@ try {
         $daktelaTabSignatureVerifier,
         new TicketPdfAttachments($daktela, $logger, $config->cacheDir),
         new ClaudePolicyDataExtractor(AnthropicClaudeMessagesClient::fromApiKey($config->claudeApiKey)),
-        $logger
+        $logger,
+        new DaktelaTicketPolicyValuesProvider($daktela)
     );
 
     sendResponse($app->handle(

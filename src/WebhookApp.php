@@ -10,6 +10,7 @@ use Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyConfirmationForm;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataCache;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataExtractor;
+use Ingreen\DaktelaPolicy\PolicyExtraction\TicketPolicyValuesProvider;
 use Ingreen\DaktelaPolicy\Support\AppException;
 use Throwable;
 
@@ -23,7 +24,8 @@ final class WebhookApp
         UtilityTabSignatureVerifier $tabSignatureVerifier,
         private readonly TicketPdfAttachments $ticketPdfAttachments,
         private readonly PolicyDataExtractor $policyDataExtractor,
-        private readonly AppLogger $logger
+        private readonly AppLogger $logger,
+        private readonly ?TicketPolicyValuesProvider $ticketPolicyValuesProvider = null
     ) {
         $this->accessGuard = new WebhookAccessGuard($config, $tabSignatureVerifier, $logger);
         $this->policyDataCache = new PolicyDataCache($config->varDir);
@@ -589,9 +591,34 @@ final class WebhookApp
     {
         $accessToken = $this->accessGuard->accessTokenForTicket($ticketId);
         $ticketTitle = $this->displayTicketTitle($ticketId, $ticketTitle);
+        $ticketPolicyValues = $extractedData instanceof ExtractedPolicyData
+            ? $this->ticketPolicyValues($ticketId)
+            : [];
         ob_start();
         require dirname(__DIR__) . '/templates/page.php';
         return (string) ob_get_clean();
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    private function ticketPolicyValues(string $ticketId): array
+    {
+        if ($this->ticketPolicyValuesProvider === null) {
+            return [];
+        }
+
+        try {
+            return $this->ticketPolicyValuesProvider->valuesForTicket($ticketId);
+        } catch (Throwable $exception) {
+            $this->logger->warning('Could not load existing ticket policy values.', [
+                'ticketId' => $ticketId,
+                'exception' => $exception::class,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return [];
+        }
     }
 
     private function displayTicketTitle(string $ticketId, ?string $ticketTitle): string

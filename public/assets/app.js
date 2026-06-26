@@ -55,6 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const groupLocks = Array.from(form.querySelectorAll('.policy-review-lock-group'));
         const saveButton = form.querySelector('button[name="confirmation"][value="yes"]');
         const retryButton = form.querySelector('button[name="confirmation"][value="no"]');
+        const systemValueButtons = Array.from(form.querySelectorAll('.policy-apply-system-value'));
 
         const sync = () => {
             const allLocked = locks.length > 0 && locks.every((checkbox) => checkbox.checked);
@@ -142,6 +143,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 sync();
+            });
+        });
+
+        systemValueButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                const field = button.closest('.policy-field');
+                const input = field === null ? null : field.querySelector('.policy-input');
+                const value = button.dataset.policyApplyValue;
+
+                if (input !== null && value !== undefined) {
+                    input.value = value;
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                }
             });
         });
 

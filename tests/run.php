@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Ingreen\DaktelaPolicy\Config\AppConfig;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaModule;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaTabSignatureVerifier;
+use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaTicketPolicyValuesProvider;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\Logging\DailyLogPaths;
 use Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData;
@@ -184,7 +185,14 @@ function app(FakeDaktela $fake, string $dir, ?string $allowedUtilityOrigin = nul
     $logger = new NullLogger();
     $daktela = new DaktelaModule($config->daktelaBaseUrl, $config->daktelaApiToken, $fake, $logger);
 
-    return new WebhookApp($config, tabSignatureVerifier(), new TicketPdfAttachments($daktela, $logger, $config->cacheDir), $extractor ?? new FakePolicyDataExtractor(), $logger);
+    return new WebhookApp(
+        $config,
+        tabSignatureVerifier(),
+        new TicketPdfAttachments($daktela, $logger, $config->cacheDir),
+        $extractor ?? new FakePolicyDataExtractor(),
+        $logger,
+        new DaktelaTicketPolicyValuesProvider($daktela)
+    );
 }
 
 function tabSignatureVerifier(): DaktelaTabSignatureVerifier
@@ -947,6 +955,46 @@ test('configured utility origin allows signed in-app attachment request', functi
     assertSameValue("%PDF-1.4\nbody", file_get_contents($dir . '/var/policies/files_scan.pdf'));
 });
 
+test('policy confirmation form shows ticket custom field value without replacing LLM value', function (): void {
+    $dir = tempDir();
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'title' => 'Policy ticket',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/scan.pdf', 'title' => 'scan.pdf', 'type' => 'application/pdf'],
+                ],
+                'customFields' => [
+                    'marka' => ['SYSTEM & <Tesla>'],
+                    'model' => [],
+                    'wartosc_pojazdu_brutto' => [''],
+                ],
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/files/scan.pdf' => pdfResponse(),
+    ]);
+    $extractor = new FakePolicyDataExtractor(ExtractedPolicyData::fromFields([
+        'marka' => 'LLM Tesla',
+        'model' => 'Model 3',
+        'wartosc_pojazdu_brutto' => '204000 PLN',
+    ], '{"marka":"LLM Tesla"}'));
+    $app = app($fake, $dir, extractor: $extractor);
+
+    $download = $app->handle('123', '0', daktelaAccessToken('123'));
+
+    assertSameValue(200, $download['status']);
+    assertTrueValue(str_contains($download['body'], 'value="LLM Tesla"'));
+    assertTrueValue(str_contains($download['body'], 'W systemie:'));
+    assertTrueValue(str_contains($download['body'], 'SYSTEM &amp; &lt;Tesla&gt;'));
+    assertTrueValue(str_contains($download['body'], 'data-policy-apply-value="SYSTEM &amp; &lt;Tesla&gt;"'));
+    assertTrueValue(str_contains($download['body'], 'class="button secondary policy-apply-system-value"'));
+    assertTrueValue(!str_contains($download['body'], 'data-policy-apply-value="Model 3"'));
+    assertTrueValue(!str_contains($download['body'], 'data-policy-apply-value="204000 PLN"'));
+});
+
 test('confirmed policy data loaded from cache is locked by default', function (): void {
     $dir = tempDir();
     $downloadCount = 0;
@@ -1146,6 +1194,37 @@ test('Daktela module URL-encodes ticket name', function (): void {
 
     assertSameValue('ABC/123', $ticket['result']['name']);
     assertSameValue('https://daktela.example/api/v6/tickets/ABC%2F123', $fake->requests[0]['url']);
+});
+
+test('Daktela ticket policy values provider normalizes custom fields', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'customFields' => [
+                    'marka' => [' Tesla ', 'Model S'],
+                    'model' => ' 3 ',
+                    'rocznik' => [2026],
+                    'przebieg' => [],
+                    'vin' => [null, ['nested'], ''],
+                    'nr_polisy' => ['POL-123'],
+                    'unknown_field' => ['ignored'],
+                ],
+            ],
+        ]),
+    ]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+    $provider = new DaktelaTicketPolicyValuesProvider($module);
+
+    $values = $provider->valuesForTicket('123');
+
+    assertSameValue('Tesla, Model S', $values['marka']);
+    assertSameValue('3', $values['model']);
+    assertSameValue('2026', $values['rocznik']);
+    assertSameValue('POL-123', $values['nr_polisy']);
+    assertArrayMissingKey('przebieg', $values);
+    assertArrayMissingKey('vin', $values);
+    assertArrayMissingKey('unknown_field', $values);
 });
 
 test('Daktela module gets CRM records linked to ticket id', function (): void {

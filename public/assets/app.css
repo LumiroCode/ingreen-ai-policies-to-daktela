@@ -500,6 +500,34 @@ h2 {
     color: #174d3f;
 }
 
+.policy-system-value {
+    align-items: center;
+    color: var(--muted);
+    display: flex;
+    gap: 8px;
+    justify-content: space-between;
+    min-width: 0;
+}
+
+.policy-system-value-text {
+    flex: 1 1 auto;
+    font-size: 12px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.policy-system-value-text span {
+    color: #475467;
+    font-weight: 700;
+}
+
+.policy-apply-system-value {
+    flex: 0 0 auto;
+    font-size: 12px;
+    min-height: 28px;
+    padding: 4px 8px;
+}
+
 .policy-input:focus,
 .button:focus-visible,
 .lock-control input:focus-visible {
@@ -583,6 +611,11 @@ h2 {
 
     .action-bar {
         grid-template-columns: 1fr;
+    }
+
+    .policy-system-value {
+        align-items: flex-start;
+        flex-direction: column;
     }
 }
 

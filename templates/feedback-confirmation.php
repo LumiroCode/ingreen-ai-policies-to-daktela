@@ -9,6 +9,7 @@ declare(strict_types=1);
  * @var array<string,bool> $selectedLockedFields
  * @var string $ticketId
  * @var string $ticketTitle
+ * @var array<string,string> $ticketPolicyValues
  * @var list<array{file:string,title?:string|null,type?:string|null,size?:int|null,source?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null}> $attachments
  */
 
@@ -116,6 +117,7 @@ $selectedAttachmentTitle = is_array($selectedAttachment)
                                 $locked = $selectedLockedFields[$key] ?? false;
                                 $fieldId = 'policy-data-' . $key;
                                 $lockId = 'policy-lock-' . $key;
+                                $ticketValue = $ticketPolicyValues[$key] ?? null;
                             ?>
                             <div class="policy-field<?= $locked ? ' locked' : '' ?>">
                                 <div class="field-topline">
@@ -142,6 +144,19 @@ $selectedAttachmentTitle = is_array($selectedAttachment)
                                     value="<?= htmlspecialchars((string) ($row['value'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                     <?= $locked ? 'readonly' : '' ?>
                                 >
+                                <?php if ($ticketValue !== null): ?>
+                                    <div class="policy-system-value">
+                                        <span class="policy-system-value-text">
+                                            W systemie:
+                                            <span><?= htmlspecialchars($ticketValue, ENT_QUOTES, 'UTF-8') ?></span>
+                                        </span>
+                                        <button
+                                            class="button secondary policy-apply-system-value"
+                                            type="button"
+                                            data-policy-apply-value="<?= htmlspecialchars($ticketValue, ENT_QUOTES, 'UTF-8') ?>"
+                                        >Użyj</button>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
                     </div>
