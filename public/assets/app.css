@@ -518,7 +518,7 @@ h2 {
 .policy-input[readonly] {
     background: #f4fbf8;
     border-color: #9ac8b8;
-    color: #174d3f;
+    color: #879d8f;
 }
 
 .policy-input-actions {
@@ -549,7 +549,7 @@ h2 {
     padding: 0 6px;
 }
 
-.policy-input-action:hover {
+.policy-input-action:not([disabled]):hover {
     border-color: #7f8b99;
 }
 
@@ -625,7 +625,7 @@ h2 {
     color: #ffffff;
 }
 
-.button.primary:hover {
+.button.primary:not([disabled]):hover {
     background: var(--primary-hover);
 }
 
@@ -635,7 +635,7 @@ h2 {
     color: #26323f;
 }
 
-.button.secondary:hover {
+.button.secondary:not([disabled]):hover {
     border-color: #7f8b99;
 }
 
