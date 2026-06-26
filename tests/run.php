@@ -1148,6 +1148,69 @@ test('Daktela module URL-encodes ticket name', function (): void {
     assertSameValue('https://daktela.example/api/v6/tickets/ABC%2F123', $fake->requests[0]['url']);
 });
 
+test('Daktela module gets CRM records linked to ticket id', function (): void {
+    $firstPageRecords = array_map(
+        static fn (int $index): array => ['name' => 'record_' . $index, 'ticket' => ['name' => 'ABC/123']],
+        range(1, 100)
+    );
+    $fake = new FakeDaktela([
+        '/api/v6/crmRecords' => function (string $method, string $url) use ($firstPageRecords): array {
+            parse_str(parse_url($url, PHP_URL_QUERY) ?: '', $query);
+
+            return jsonResponse([
+                'result' => [
+                    'data' => ((int) $query['page']) === 1
+                        ? $firstPageRecords
+                        : [
+                            ['name' => 'record_policy', 'ticket' => ['name' => 'ABC/123']],
+                            ['name' => 'record_vehicle', 'ticket' => ['name' => 'ABC/123']],
+                        ],
+                ],
+            ]);
+        },
+    ]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    $records = $module->getCrmRecordsByTicketId('ABC/123');
+    parse_str(parse_url($fake->requests[0]['url'], PHP_URL_QUERY) ?: '', $query);
+    parse_str(parse_url($fake->requests[1]['url'], PHP_URL_QUERY) ?: '', $secondPageQuery);
+
+    assertSameValue(102, count($records));
+    assertSameValue(['record_1', 'record_policy', 'record_vehicle'], array_map(
+        static fn (array $record): string => $record['name'],
+        [$records[0], $records[100], $records[101]]
+    ));
+    assertSameValue('GET', $fake->requests[0]['method']);
+    assertSameValue('https://daktela.example/api/v6/crmRecords?page=1&pageSize=100&filter%5Bfield%5D=ticket.name&filter%5Boperator%5D=eq&filter%5Bvalue%5D=ABC%2F123', $fake->requests[0]['url']);
+    assertSameValue('ticket.name', $query['filter']['field']);
+    assertSameValue('eq', $query['filter']['operator']);
+    assertSameValue('ABC/123', $query['filter']['value']);
+    assertSameValue('1', $query['page']);
+    assertSameValue('100', $query['pageSize']);
+    assertSameValue('2', $secondPageQuery['page']);
+    assertSameValue('100', $secondPageQuery['pageSize']);
+    assertSameValue('application/json', $fake->requests[0]['headers']['Accept']);
+    assertSameValue('module-token', $fake->requests[0]['headers']['X-AUTH-TOKEN-OPENAPI']);
+});
+
+test('Daktela module rejects malformed CRM record list', function (): void {
+    $fake = new FakeDaktela([
+        '/api/v6/crmRecords' => jsonResponse(['result' => ['data' => null]]),
+    ]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    try {
+        $module->getCrmRecordsByTicketId('123');
+    } catch (AppException $exception) {
+        assertSameValue(502, $exception->statusCode());
+        assertSameValue('invalid_daktela_response', $exception->errorCode());
+        assertSameValue('/api/v6/crmRecords', $exception->details()['path']);
+        return;
+    }
+
+    throw new RuntimeException('Expected exception.');
+});
+
 test('Daktela module gets normalized ticket PDF attachments', function (): void {
     $fake = new FakeDaktela([
         '/api/v6/tickets/ABC%2F123' => jsonResponse([

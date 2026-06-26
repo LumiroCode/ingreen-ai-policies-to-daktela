@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Ingreen\DaktelaPolicy\DaktelaCommunication;
 
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Services\DaktelaCommunicationService;
+use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\GetCrmRecordsByTicketId;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\GetTicketByName;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\GetTicketAttachments;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
@@ -13,6 +14,7 @@ use Ingreen\DaktelaPolicy\TicketAttachmentProvider;
 final class DaktelaModule implements TicketAttachmentProvider
 {
     private readonly DaktelaCommunicationService $service;
+    private readonly GetCrmRecordsByTicketId $getCrmRecordsByTicketId;
     private readonly GetTicketByName $getTicketByName;
     private readonly GetTicketAttachments $getTicketAttachments;
 
@@ -26,6 +28,7 @@ final class DaktelaModule implements TicketAttachmentProvider
         ?AppLogger $logger = null
     ) {
         $this->service = new DaktelaCommunicationService($baseUrl, $apiToken, $requester);
+        $this->getCrmRecordsByTicketId = new GetCrmRecordsByTicketId($this->service);
         $this->getTicketByName = new GetTicketByName($this->service);
         $this->getTicketAttachments = new GetTicketAttachments($this->service, $logger);
     }
@@ -36,6 +39,14 @@ final class DaktelaModule implements TicketAttachmentProvider
     public function getTicketByName(string $name): array
     {
         return $this->getTicketByName->execute($name);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function getCrmRecordsByTicketId(string $ticketId): array
+    {
+        return $this->getCrmRecordsByTicketId->execute($ticketId);
     }
 
     /**
