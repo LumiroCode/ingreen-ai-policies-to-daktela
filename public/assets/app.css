@@ -467,6 +467,13 @@ h2 {
     font-weight: 700;
 }
 
+.field-description {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
 .lock-control {
     align-items: center;
     color: var(--muted);

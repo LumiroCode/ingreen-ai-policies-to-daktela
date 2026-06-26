@@ -67,6 +67,72 @@ document.addEventListener('DOMContentLoaded', () => {
         const retryButton = form.querySelector('button[name="confirmation"][value="no"]');
         const systemValueButtons = Array.from(form.querySelectorAll('.policy-apply-system-value'));
 
+        const formatGrossValueFromNet = (value) => {
+            const trimmedValue = value.trim();
+
+            if (trimmedValue === '') {
+                return '';
+            }
+
+            const matchedAmount = trimmedValue.match(/[-+]?\d(?:[\d\s.,\u00a0]*\d)?/u);
+
+            if (matchedAmount === null) {
+                return '';
+            }
+
+            let amount = matchedAmount[0].replace(/[\s\u00a0]+/gu, '');
+            const commaPosition = amount.lastIndexOf(',');
+            const dotPosition = amount.lastIndexOf('.');
+            let decimalSeparator = null;
+
+            if (commaPosition !== -1 && dotPosition !== -1) {
+                decimalSeparator = commaPosition > dotPosition ? ',' : '.';
+            } else if (commaPosition !== -1 && amount.length - commaPosition <= 3) {
+                decimalSeparator = ',';
+            } else if (dotPosition !== -1 && amount.length - dotPosition <= 3) {
+                decimalSeparator = '.';
+            }
+
+            if (decimalSeparator !== null) {
+                const thousandsSeparator = decimalSeparator === ',' ? '.' : ',';
+                amount = amount.replaceAll(thousandsSeparator, '').replace(decimalSeparator, '.');
+            } else {
+                amount = amount.replace(/[,.]/gu, '');
+            }
+
+            const parsedAmount = Number(amount);
+
+            if (!Number.isFinite(parsedAmount)) {
+                return '';
+            }
+
+            const gross = Math.round(parsedAmount * 1.23 * 100) / 100;
+            const fractionDigits = Math.round(gross * 100) % 100 === 0 ? 0 : 2;
+            const formattedGross = gross.toLocaleString('pl-PL', {
+                minimumFractionDigits: fractionDigits,
+                maximumFractionDigits: fractionDigits,
+            });
+
+            return formattedGross + (/(?:PLN|zł)/iu.test(trimmedValue) ? ' PLN' : '');
+        };
+
+        form.querySelectorAll('[data-policy-net-gross-value]').forEach((description) => {
+            const field = description.closest('.policy-field');
+            const input = field === null ? null : field.querySelector('.policy-input');
+            const value = description.querySelector('span');
+
+            if (input === null || value === null) {
+                return;
+            }
+
+            const syncGrossValue = () => {
+                value.textContent = formatGrossValueFromNet(input.value);
+            };
+
+            input.addEventListener('input', syncGrossValue);
+            syncGrossValue();
+        });
+
         const sync = () => {
             const allLocked = locks.length > 0 && locks.every((checkbox) => checkbox.checked);
             const someLocked = locks.some((checkbox) => checkbox.checked);

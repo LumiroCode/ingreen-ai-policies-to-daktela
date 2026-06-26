@@ -52,6 +52,53 @@ $selectedAttachment = $selectedAttachmentIndex !== null && ctype_digit($selected
 $selectedAttachmentTitle = is_array($selectedAttachment)
     ? (string) ($selectedAttachment['title'] ?? basename($selectedAttachment['file']))
     : null;
+
+$vehicleGrossValueFromNet = static function (?string $value): string {
+    $value = trim((string) $value);
+
+    if ($value === '') {
+        return '';
+    }
+
+    if (!preg_match('/[-+]?\d(?:[\d\s.,\x{00A0}]*\d)?/u', $value, $matches)) {
+        return '';
+    }
+
+    $amount = preg_replace('/[\s\x{00A0}]+/u', '', $matches[0]);
+
+    if (!is_string($amount) || $amount === '') {
+        return '';
+    }
+
+    $commaPosition = strrpos($amount, ',');
+    $dotPosition = strrpos($amount, '.');
+    $decimalSeparator = null;
+
+    if ($commaPosition !== false && $dotPosition !== false) {
+        $decimalSeparator = $commaPosition > $dotPosition ? ',' : '.';
+    } elseif ($commaPosition !== false && strlen($amount) - $commaPosition <= 3) {
+        $decimalSeparator = ',';
+    } elseif ($dotPosition !== false && strlen($amount) - $dotPosition <= 3) {
+        $decimalSeparator = '.';
+    }
+
+    if ($decimalSeparator !== null) {
+        $thousandsSeparator = $decimalSeparator === ',' ? '.' : ',';
+        $amount = str_replace($thousandsSeparator, '', $amount);
+        $amount = str_replace($decimalSeparator, '.', $amount);
+    } else {
+        $amount = str_replace([',', '.'], '', $amount);
+    }
+
+    if (!is_numeric($amount)) {
+        return '';
+    }
+
+    $gross = round(((float) $amount) * 1.23, 2);
+    $formatted = number_format($gross, ((int) round($gross * 100)) % 100 === 0 ? 0 : 2, ',', ' ');
+
+    return $formatted . (preg_match('/(?:PLN|zł)/iu', $value) ? ' PLN' : '');
+};
 ?>
 
 <?php if ($policyRows !== []): ?>
@@ -118,6 +165,7 @@ $selectedAttachmentTitle = is_array($selectedAttachment)
                                 $fieldId = 'policy-data-' . $key;
                                 $lockId = 'policy-lock-' . $key;
                                 $ticketValue = $ticketPolicyValues[$key] ?? null;
+                                $descriptionId = 'policy-description-' . $key;
                             ?>
                             <div class="policy-field<?= $locked ? ' locked' : '' ?>">
                                 <div class="field-topline">
@@ -136,12 +184,20 @@ $selectedAttachmentTitle = is_array($selectedAttachment)
                                         <span>zachowaj</span>
                                     </label>
                                 </div>
+                                <?php if ($key === 'wartosc_pojazdu_netto'): ?>
+                                    <div
+                                        id="<?= htmlspecialchars($descriptionId, ENT_QUOTES, 'UTF-8') ?>"
+                                        class="field-description policy-net-gross-value"
+                                        data-policy-net-gross-value
+                                    >* 1,23 = <span><?= htmlspecialchars($vehicleGrossValueFromNet($row['value'] ?? null), ENT_QUOTES, 'UTF-8') ?></span></div>
+                                <?php endif; ?>
                                 <input
                                     id="<?= htmlspecialchars($fieldId, ENT_QUOTES, 'UTF-8') ?>"
                                     class="policy-input"
                                     type="text"
                                     name="policy_data[<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>]"
                                     value="<?= htmlspecialchars((string) ($row['value'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                    <?= $key === 'wartosc_pojazdu_netto' ? 'aria-describedby="' . htmlspecialchars($descriptionId, ENT_QUOTES, 'UTF-8') . '"' : '' ?>
                                     <?= $locked ? 'readonly' : '' ?>
                                 >
                                 <?php if ($ticketValue !== null): ?>
