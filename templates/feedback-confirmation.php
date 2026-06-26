@@ -265,7 +265,7 @@ $vehicleNetValueFromGross = static function (?string $value) use ($vehicleValueA
                                             class="button secondary policy-apply-system-value"
                                             type="button"
                                             data-policy-apply-value="<?= htmlspecialchars($ticketValue, ENT_QUOTES, 'UTF-8') ?>"
-                                        >Użyj</button>
+                                        >← użyj z systemu</button>
                                     </div>
                                 <?php endif; ?>
                             </div>
