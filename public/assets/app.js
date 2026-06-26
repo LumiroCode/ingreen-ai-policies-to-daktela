@@ -220,7 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (saveButton !== null) {
-                saveButton.disabled = true;
+                saveButton.disabled = !allRequiredLocked;
             }
 
             if (retryButton !== null) {

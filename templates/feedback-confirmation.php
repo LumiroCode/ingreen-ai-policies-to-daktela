@@ -292,8 +292,8 @@ $confirmationAction = '?' . http_build_query([
                 type="submit"
                 name="confirmation"
                 value="yes"
-                <?= $allLocked ? '' : 'disabled' ?>
-                title="<?= $allLocked ? '' : 'Oznacz wszystkie niepuste pola jako poprawne lub skasuj ich wartość, aby móc zapisać dane.' ?>"
+                <?= $allRequiredLocked ? '' : 'disabled' ?>
+                title="<?= $allRequiredLocked ? 'Zapisz do ticketa i rekordów CRM' : 'Oznacz wszystkie niepuste pola jako poprawne lub skasuj ich wartość, aby móc zapisać dane.' ?>"
             >Zapisz</button>
             <button
                 class="button secondary"
