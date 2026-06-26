@@ -71,12 +71,12 @@ Reguły normalizacji:
 - rocznik zwróć jako rok produkcji pojazdu.
 - przebieg zwróć w kilometrach.
 - wartosc_pojazdu_brutto i wartosc_pojazdu_netto zwróć w PLN, jeśli są dostępne.
-- forma_wlasnosci zwróć tylko wtedy, gdy polisa jednoznacznie wskazuje jedną z wartości: "Własny", "Leasing", "Bank", "Wynajem".
+- forma_wlasnosci zwróć tylko wtedy, gdy polisa jednoznacznie wskazuje jedną z wartości: "Własny", "Leasing", "Bank", "Wynajem" lub synonim którejś z nich.
 - pojemnosc_silnika zwróć w cm3.
-- data_pierwszej_rejestracji dotyczy tylko pojazdów używanych; dla pojazdów nowych zwróć null, chyba że polisa jednoznacznie podaje tę datę.
-- planowana_data_rejestracji dotyczy tylko pojazdów nowych; dla pojazdów używanych zwróć null.
+- data_pierwszej_rejestracji dotyczy tylko pojazdów **używanych**; dla pojazdów nowych zwróć null, chyba że polisa jednoznacznie podaje tę datę.
+- planowana_data_rejestracji dotyczy tylko pojazdów **nowych**; dla pojazdów używanych zwróć null.
 - wspolposiadacz zwróć jako "tak", jeśli polisa wskazuje więcej niż jednego właściciela, współwłaściciela lub współposiadacza pojazdu; zwróć "nie", jeśli polisa jednoznacznie wskazuje tylko jednego właściciela/posiadacza. Jeśli wspolposiadacz to "tak", uzupełnij dane współposiadacza na podstawie polisy.
-- pakiet_ubezpieczeniowy zwróć jako "tak", jeśli dokument dotyczy całego pakietu ubezpieczeniowego; zwróć "nie", jeśli dotyczy tylko pojedynczego produktu AC, NNW, Assistance, GAP albo Przedłużona Gwarancja.
+- pakiet_ubezpieczeniowy zwróć jako "tak", jeśli dokument dotyczy całego pakietu ubezpieczeniowego; zwróć "nie", jeśli dotyczy tylko listy produktów jak AC, NNW, Assistance, GAP albo Przedłużona Gwarancja.
 - rodzaj_assistance zwróć tylko wtedy, gdy zakres assistance da się jednoznacznie dopasować do jednej z podanych wartości.
 - nr_polisy zwróć jako numer polisy.
 - ceny zwróć z walutą, jeśli jest dostępna.
