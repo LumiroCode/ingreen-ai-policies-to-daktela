@@ -21,7 +21,7 @@ Dane bierzemy z polisy i z ticketa. Zanim wrzucimy dane do rekordu CRM, zaktuali
     - nr_polisy: numer polisy
     - cena_pakietu: Cena pakietu pierwszy rok (z ticketu)
     - cena_wznowienia: ? (z ticketu) / alternatywna dla ceny pakietu pierwszy rok
-    - pc_cena: ? (z ticketu) / alternatywna dla ceny pakietu pierwszy rok
+    - oc_cena: ? (z ticketu) / alternatywna dla ceny pakietu pierwszy rok
     - ac_cena: ? (z ticketu) / alternatywna dla ceny pakietu pierwszy rok
     - cena_nnw: ? (z ticketu) / alternatywna dla ceny pakietu pierwszy rok
     - cena_assistance: ? (z ticketu) / alternatywna dla ceny pakietu pierwszy rok

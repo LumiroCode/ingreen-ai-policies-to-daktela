@@ -55,7 +55,7 @@ Zwróć wyłącznie poprawny JSON z dokładnie tymi kluczami:
   "data_konca_polisy": string,
   "cena_pakietu": string,
   "cena_wznowienia": string,
-  "pc_cena": string,
+  "oc_cena": string,
   "ac_cena": string,
   "cena_nnw": string,
   "cena_assistance": string,
@@ -81,7 +81,7 @@ Reguły normalizacji:
 - nr_polisy zwróć jako numer polisy.
 - ceny zwróć z walutą, jeśli jest dostępna.
 - cena_pakietu dotyczy ceny pakietu za pierwszy rok.
-- cena_wznowienia, pc_cena, ac_cena, cena_nnw, cena_assistance, gap_cena i cena_przedluzonej_gwarancji zwróć tylko wtedy, gdy dokument jednoznacznie wskazuje odpowiednią składkę/cenę.
+- cena_wznowienia, oc_cena, ac_cena, cena_nnw, cena_assistance, gap_cena i cena_przedluzonej_gwarancji zwróć tylko wtedy, gdy dokument jednoznacznie wskazuje odpowiednią składkę/cenę.
 - rodzaj_polisy zwróć tylko wtedy, gdy zakres polisy da się jednoznacznie dopasować do jednej z podanych wartości.
 - data_sprzedazy_lubezpieczenia dotyczy sprzedaży ubezpieczenia za pierwszy rok, a data_sprzedazy_wznowienia sprzedaży wznowienia.
 - Jeśli dokument podaje "/", "-", "brak", puste pole albo wartość niejednoznaczną, zwróć "".
@@ -186,7 +186,7 @@ PROMPT;
             'data_konca_polisy' => ['type' => 'string'],
             'cena_pakietu' => ['type' => 'string'],
             'cena_wznowienia' => ['type' => 'string'],
-            'pc_cena' => ['type' => 'string'],
+            'oc_cena' => ['type' => 'string'],
             'ac_cena' => ['type' => 'string'],
             'cena_nnw' => ['type' => 'string'],
             'cena_assistance' => ['type' => 'string'],
@@ -243,7 +243,7 @@ PROMPT;
             'data_konca_polisy',
             'cena_pakietu',
             'cena_wznowienia',
-            'pc_cena',
+            'oc_cena',
             'ac_cena',
             'cena_nnw',
             'cena_assistance',

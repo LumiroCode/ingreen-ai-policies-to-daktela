@@ -908,7 +908,7 @@ test('configured utility origin allows signed in-app attachment request', functi
     assertTrueValue(str_contains($download['body'], 'name="policy_data[pakiet_ubezpieczeniowy]"'));
     assertTrueValue(str_contains($download['body'], 'name="policy_data[nr_polisy]"'));
     assertTrueValue(str_contains($download['body'], 'name="policy_data[cena_wznowienia]"'));
-    assertTrueValue(str_contains($download['body'], 'name="policy_data[pc_cena]"'));
+    assertTrueValue(str_contains($download['body'], 'name="policy_data[oc_cena]"'));
     assertTrueValue(str_contains($download['body'], 'name="policy_data[ac_cena]"'));
     assertTrueValue(str_contains($download['body'], 'name="policy_data[cena_nnw]"'));
     assertTrueValue(str_contains($download['body'], 'name="policy_data[cena_assistance]"'));
@@ -1697,7 +1697,7 @@ test('app logger writes JSON lines to configured log file', function (): void {
 
 test('policy data parser maps Claude JSON response to extracted policy data', function (): void {
     $data = (new PolicyDataResponseParser())->parse('```json
-{"stan_pojazdu":"Używany","nr_rejestracyjny":"WX12345","marka":"Toyota","model":"Corolla","wersja":"Comfort","vin":"JT123","forma_wlasnosci":"Leasing","rocznik":"2022","przebieg":"12000","wartosc_pojazdu_brutto":"123 000 PLN","wartosc_pojazdu_netto":null,"kategoria_pojazdu":"Osobowy (Kat. M1)","sposob_korzystania":"Standardowy","typ_silnika":"Hybryda","pojemnosc_silnika":"1798","data_nabycia":"2024-01-01","data_pierwszej_rejestracji":"2022-03-01","planowana_data_rejestracji":null,"wspolposiadacz":"tak","imie_wspolposiadacza":"Jan","nazwisko_wspolposiadacza":"Kowalski","pesel_wspolposiadacza":"80010112345","adres_wspolposiadacza":"ul. Prosta 1, Warszawa","pakiet_ubezpieczeniowy":"tak","rodzaj_assistance":"Polska","towarzystwo_ubezpieczeniowe":"PZU","nr_polisy":"POL-123","kategoria_tu":"Partner InGreen","data_konca_polisy":"2025-03-01","cena_pakietu":"3200 PLN","cena_wznowienia":"3300 PLN","pc_cena":"100 PLN","ac_cena":"2100 PLN","cena_nnw":"50 PLN","cena_assistance":"80 PLN","gap_cena":"900 PLN","cena_przedluzonej_gwarancji":"1200 PLN","pochodzenie_polisy":"Dealer","rodzaj_polisy":"OC/AC/NNW/Assistance","data_sprzedazy_lubezpieczenia":"2024-03-01","data_sprzedazy_wznowienia":"2025-02-20"}
+{"stan_pojazdu":"Używany","nr_rejestracyjny":"WX12345","marka":"Toyota","model":"Corolla","wersja":"Comfort","vin":"JT123","forma_wlasnosci":"Leasing","rocznik":"2022","przebieg":"12000","wartosc_pojazdu_brutto":"123 000 PLN","wartosc_pojazdu_netto":null,"kategoria_pojazdu":"Osobowy (Kat. M1)","sposob_korzystania":"Standardowy","typ_silnika":"Hybryda","pojemnosc_silnika":"1798","data_nabycia":"2024-01-01","data_pierwszej_rejestracji":"2022-03-01","planowana_data_rejestracji":null,"wspolposiadacz":"tak","imie_wspolposiadacza":"Jan","nazwisko_wspolposiadacza":"Kowalski","pesel_wspolposiadacza":"80010112345","adres_wspolposiadacza":"ul. Prosta 1, Warszawa","pakiet_ubezpieczeniowy":"tak","rodzaj_assistance":"Polska","towarzystwo_ubezpieczeniowe":"PZU","nr_polisy":"POL-123","kategoria_tu":"Partner InGreen","data_konca_polisy":"2025-03-01","cena_pakietu":"3200 PLN","cena_wznowienia":"3300 PLN","oc_cena":"100 PLN","ac_cena":"2100 PLN","cena_nnw":"50 PLN","cena_assistance":"80 PLN","gap_cena":"900 PLN","cena_przedluzonej_gwarancji":"1200 PLN","pochodzenie_polisy":"Dealer","rodzaj_polisy":"OC/AC/NNW/Assistance","data_sprzedazy_lubezpieczenia":"2024-03-01","data_sprzedazy_wznowienia":"2025-02-20"}
 ```');
 
     assertSameValue('Toyota', $data->carMake);
@@ -1718,7 +1718,7 @@ test('policy data parser maps Claude JSON response to extracted policy data', fu
     assertSameValue('POL-123', $data->field('nr_polisy'));
     assertSameValue('3200 PLN', $data->field('cena_pakietu'));
     assertSameValue('3300 PLN', $data->field('cena_wznowienia'));
-    assertSameValue('100 PLN', $data->field('pc_cena'));
+    assertSameValue('100 PLN', $data->field('oc_cena'));
     assertSameValue('2100 PLN', $data->field('ac_cena'));
     assertSameValue('50 PLN', $data->field('cena_nnw'));
     assertSameValue('80 PLN', $data->field('cena_assistance'));
