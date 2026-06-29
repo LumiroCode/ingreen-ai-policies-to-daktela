@@ -2,3 +2,4 @@ Be smart about what you do. Notice small things and interdependencies. Think abo
 Keep code split by responsibilities. Clear-cut the interfaces between parts or modules and make them explicit. Prefere modularity and maintainability. Avoid code duplications. Abstract away the details. Use layers of logic. Make data flow in one direction always. Follow each: SOLID, CQRS, DRY, KISS and YAGNI. Think, think, think. Refactor often. Foster single source of truth for operations, switches, and data in code.
 Be surgically precise and make only minimal changes needed to fulfill the goal and instructions.
 Work in an iuncremental manner - proof of concept > minimal value product > working feature > refactored code > optimized code. Always keep the code in a working state.
+Perform self-review of the changes you make. Be your own critic. Ask yourself: "Does this code foster rules imposed in instructions? Does it make it easy to make changes in bahaviour with small edits?".
