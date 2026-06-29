@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaTabSignatureVerifier;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataExtractor;
+use Ingreen\DaktelaPolicy\PolicyFiles\PolicyPdf;
+use Ingreen\DaktelaPolicy\PolicyFiles\PolicyPdfMaterializer;
 use Ingreen\DaktelaPolicy\Config\AppConfig;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaModule;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaTicketPolicyValuesProvider;
@@ -29,6 +31,24 @@ function pdfResponse(string $body = "%PDF-1.4\nbody"): array
     ];
 }
 
+function testPolicyPdf(string $title = 'policy.pdf', string $body = "%PDF-1.4\nbody"): PolicyPdf
+{
+    $path = tempDir() . '/' . $title;
+    file_put_contents($path, $body);
+
+    return PolicyPdf::fromFile($path, $title);
+}
+
+function existingTestPolicyAttachmentResponse(string $title = 'policy.pdf', string $body = "%PDF-1.4\nbody"): array
+{
+    return jsonResponse(['result' => ['data' => [[
+        'file' => 'stored-policy.pdf',
+        'title' => $title,
+        'type' => 'application/pdf',
+        'size' => strlen($body),
+    ]]]]);
+}
+
 function tempDir(): string
 {
     $dir = sys_get_temp_dir() . '/daktela-policy-test-' . bin2hex(random_bytes(4));
@@ -51,11 +71,13 @@ function app(
 
     $logger = new NullLogger();
     $daktela = new DaktelaModule($config->daktelaBaseUrl, $config->daktelaApiToken, $fake, $logger);
+    $ticketPdfAttachments = new TicketPdfAttachments($daktela, $logger, $config->cacheDir);
 
     return new WebhookApp(
         $config,
         tabSignatureVerifier(),
-        new TicketPdfAttachments($daktela, $logger, $config->cacheDir),
+        $ticketPdfAttachments,
+        new PolicyPdfMaterializer($ticketPdfAttachments, $config->varDir, $config->maxDownloadBytes),
         $extractor ?? new FakePolicyDataExtractor(),
         $logger,
         new DaktelaTicketPolicyValuesProvider($daktela, $logger),

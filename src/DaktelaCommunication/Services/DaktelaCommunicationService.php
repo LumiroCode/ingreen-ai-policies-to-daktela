@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Ingreen\DaktelaPolicy\DaktelaCommunication\Services;
 
+use CURLFile;
 use Ingreen\DaktelaPolicy\Support\AppException;
 
 /**
@@ -12,7 +13,7 @@ use Ingreen\DaktelaPolicy\Support\AppException;
 final class DaktelaCommunicationService
 {
     /**
-     * @param null|callable(string, string, array<string, string>, ?string): array{status:int,headers:array<string,string>,body:string} $requester
+     * @param null|callable(string, string, array<string, string>, string|array<string,CURLFile>|null): array{status:int,headers:array<string,string>,body:string} $requester
      */
     public function __construct(
         private readonly string $baseUrl,
@@ -60,6 +61,32 @@ final class DaktelaCommunicationService
     public function putFormJson(string $path, array $data, string $errorCode = 'daktela_request_failed'): array
     {
         return $this->sendFormJson('PUT', $path, $data, $errorCode);
+    }
+
+    /**
+     * @param array<string,mixed> $query
+     */
+    public function postMultipartFileRaw(
+        string $path,
+        array $query,
+        string $fieldName,
+        CURLFile $file,
+        string $errorCode = 'daktela_request_failed'
+    ): string
+    {
+        unset($query['accessToken']);
+        $query['accessToken'] = $this->apiToken;
+
+        $response = $this->request(
+            'POST',
+            $this->buildUrl($path, $query),
+            ['Accept' => 'application/json'],
+            [$fieldName => $file]
+        );
+
+        $this->assertSuccessfulResponse($response, $path, $errorCode);
+
+        return $response['body'];
     }
 
     /**
@@ -124,7 +151,7 @@ final class DaktelaCommunicationService
      * @param array<string, string> $headers
      * @return array{status:int,headers:array<string,string>,body:string}
      */
-    private function request(string $method, string $url, array $headers = [], ?string $body = null): array
+    private function request(string $method, string $url, array $headers = [], string|array|null $body = null): array
     {
         if ($this->requester !== null) {
             return ($this->requester)($method, $url, $headers, $body);

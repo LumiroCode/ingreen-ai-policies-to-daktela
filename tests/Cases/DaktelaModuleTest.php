@@ -28,7 +28,6 @@ test('downloader handles relative Daktela file path', function (): void {
     assertSameValue('token', $fake->requests[0]['headers']['X-AUTH-TOKEN-OPENAPI']);
 });
 
-
 test('Daktela module gets ticket by name through its facade', function (): void {
     $fake = new FakeDaktela([
         '/api/v6/tickets/123' => jsonResponse(['result' => ['name' => '123']]),
@@ -673,6 +672,7 @@ test('Daktela module creates policy CRM record when no matching record exists', 
         ]),
         '/api/v6/crmRecords' => jsonResponse(['result' => ['data' => []]]),
         '/api/v6/crmRecords.json' => jsonResponse(['result' => ['name' => 'record_created']]),
+        '/api/v6/crmRecords/record_created/attachments.json' => existingTestPolicyAttachmentResponse(),
     ]);
     $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
 
@@ -684,7 +684,7 @@ test('Daktela module creates policy CRM record when no matching record exists', 
         'nr_polisy' => 'POL-123',
         'towarzystwo_ubezpieczeniowe' => 'PZU',
         'data_konca_polisy' => '2027-01-31',
-    ], '{}'));
+    ], '{}'), testPolicyPdf());
     parse_str((string) $fake->requests[2]['body'], $body);
 
     assertSameValue('record_created', $response['result']['name']);
@@ -742,6 +742,7 @@ test('Daktela module updates policy CRM record when exactly one matching record 
             ],
         ]),
         '/api/v6/crmRecords/record_policy.json' => jsonResponse(['result' => ['name' => 'record_policy']]),
+        '/api/v6/crmRecords/record_policy/attachments.json' => existingTestPolicyAttachmentResponse(),
         '/api/v6/crmRecords.json' => jsonResponse(['result' => ['name' => 'record_vehicle_created']]),
     ]);
     $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
@@ -750,7 +751,7 @@ test('Daktela module updates policy CRM record when exactly one matching record 
         'nr_rejestracyjny' => 'WX12345',
         'vin' => 'FORMVIN123',
         'nr_polisy' => 'POL-456',
-    ], '{}'));
+    ], '{}'), testPolicyPdf());
     parse_str((string) $fake->requests[2]['body'], $body);
 
     assertSameValue('record_policy', $response['result']['name']);
@@ -798,7 +799,7 @@ test('Daktela module aborts policy CRM save when more than one matching record e
         $module->saveConfirmedPolicyData('123', ExtractedPolicyData::fromFields([
             'nr_rejestracyjny' => 'WX12345',
             'vin' => 'TMB123',
-        ], '{}'));
+        ], '{}'), testPolicyPdf());
     } catch (\Ingreen\DaktelaPolicy\Support\AppException $exception) {
         assertSameValue(409, $exception->statusCode());
         assertSameValue('multiple_policy_crm_records_found', $exception->errorCode());
@@ -837,6 +838,7 @@ test('Daktela module creates vehicle CRM record when no matching vehicle record 
                 ],
             ]);
         },
+        '/api/v6/crmRecords/record_policy_created/attachments.json' => existingTestPolicyAttachmentResponse(),
     ]);
     $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
 
@@ -857,12 +859,12 @@ test('Daktela module creates vehicle CRM record when no matching vehicle record 
         'pesel_wspolposiadacza' => '12345678901',
         'adres_wspolposiadacza' => 'Warszawa',
         'nr_polisy' => 'POL-123',
-    ], '{}'));
-    parse_str((string) $fake->requests[4]['body'], $body);
+    ], '{}'), testPolicyPdf());
+    parse_str((string) $fake->requests[5]['body'], $body);
 
     assertSameValue('record_policy_created', $response['result']['name']);
-    assertSameValue('POST', $fake->requests[4]['method']);
-    assertSameValue('https://daktela.example/api/v6/crmRecords.json', $fake->requests[4]['url']);
+    assertSameValue('POST', $fake->requests[5]['method']);
+    assertSameValue('https://daktela.example/api/v6/crmRecords.json', $fake->requests[5]['url']);
     assertSameValue('Pojazdy', $body['title']);
     assertSameValue('type_68227f433880e473202607', $body['type']['name']);
     assertSameValue('Pojazdy', $body['type']['title']);
@@ -910,6 +912,7 @@ test('Daktela module updates vehicle CRM record when exactly one matching vehicl
             ],
         ]),
         '/api/v6/crmRecords/record_policy.json' => jsonResponse(['result' => ['name' => 'record_policy']]),
+        '/api/v6/crmRecords/record_policy/attachments.json' => existingTestPolicyAttachmentResponse(),
         '/api/v6/crmRecords/record_vehicle.json' => jsonResponse(['result' => ['name' => 'record_vehicle']]),
     ]);
     $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
@@ -918,11 +921,11 @@ test('Daktela module updates vehicle CRM record when exactly one matching vehicl
         'nr_rejestracyjny' => 'WX12345',
         'vin' => 'TMB123',
         'marka' => 'Skoda',
-    ], '{}'));
-    parse_str((string) $fake->requests[5]['body'], $body);
+    ], '{}'), testPolicyPdf());
+    parse_str((string) $fake->requests[6]['body'], $body);
 
-    assertSameValue('PUT', $fake->requests[5]['method']);
-    assertSameValue('https://daktela.example/api/v6/crmRecords/record_vehicle.json', $fake->requests[5]['url']);
+    assertSameValue('PUT', $fake->requests[6]['method']);
+    assertSameValue('https://daktela.example/api/v6/crmRecords/record_vehicle.json', $fake->requests[6]['url']);
     assertSameValue('Pojazdy', $body['title']);
     assertSameValue('Skoda', $body['customFields']['marka']);
     assertSameValue('TMB123', $body['customFields']['vin']);
@@ -964,6 +967,7 @@ test('Daktela module aborts vehicle CRM save when more than one matching vehicle
             ],
         ]),
         '/api/v6/crmRecords/record_policy.json' => jsonResponse(['result' => ['name' => 'record_policy']]),
+        '/api/v6/crmRecords/record_policy/attachments.json' => existingTestPolicyAttachmentResponse(),
     ]);
     $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
 
@@ -971,12 +975,12 @@ test('Daktela module aborts vehicle CRM save when more than one matching vehicle
         $module->saveConfirmedPolicyData('123', ExtractedPolicyData::fromFields([
             'nr_rejestracyjny' => 'WX12345',
             'vin' => 'TMB123',
-        ], '{}'));
+        ], '{}'), testPolicyPdf());
     } catch (\Ingreen\DaktelaPolicy\Support\AppException $exception) {
         assertSameValue(409, $exception->statusCode());
         assertSameValue('multiple_vehicle_crm_records_found', $exception->errorCode());
         assertSameValue(['record_vehicle_registration', 'record_vehicle_vin'], $exception->details()['recordIdentifiers']);
-        assertSameValue(['PUT', 'GET', 'GET', 'PUT', 'GET'], array_map(
+        assertSameValue(['PUT', 'GET', 'GET', 'PUT', 'GET', 'GET'], array_map(
             static fn (array $request): string => $request['method'],
             $fake->requests
         ));

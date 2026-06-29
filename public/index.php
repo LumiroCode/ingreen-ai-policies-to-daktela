@@ -10,6 +10,7 @@ use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\Logging\DailyLogPaths;
 use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\AnthropicClaudeMessagesClient;
 use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\ClaudePolicyDataExtractor;
+use Ingreen\DaktelaPolicy\PolicyFiles\PolicyPdfMaterializer;
 use Ingreen\DaktelaPolicy\Support\AppException;
 use Ingreen\DaktelaPolicy\Support\DirectoryPreparer;
 use Ingreen\DaktelaPolicy\TicketPdfAttachments;
@@ -32,10 +33,12 @@ try {
     $logger = new AppLogger($dailyLogPaths->logsFile());
     $daktela = new DaktelaModule($config->daktelaBaseUrl, $config->daktelaApiToken, logger: $logger);
     $daktelaTabSignatureVerifier = new DaktelaTabSignatureVerifier();
+    $ticketPdfAttachments = new TicketPdfAttachments($daktela, $logger, $config->cacheDir);
     $app = new WebhookApp(
         $config,
         $daktelaTabSignatureVerifier,
-        new TicketPdfAttachments($daktela, $logger, $config->cacheDir),
+        $ticketPdfAttachments,
+        new PolicyPdfMaterializer($ticketPdfAttachments, $config->varDir, $config->maxDownloadBytes),
         new ClaudePolicyDataExtractor(AnthropicClaudeMessagesClient::fromApiKey($config->claudeApiKey)),
         $logger,
         new DaktelaTicketPolicyValuesProvider($daktela, $logger),

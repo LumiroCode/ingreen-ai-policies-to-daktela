@@ -229,12 +229,14 @@ test('confirmed policy data updates matching CRM record using form registration 
             ],
         ]),
         '/api/v6/crmRecords/record_form_match.json' => jsonResponse(['result' => ['name' => 'record_form_match']]),
+        '/api/v6/crmRecords/record_form_match/attachments.json' => existingTestPolicyAttachmentResponse('scan.pdf'),
         '/api/v6/crmRecords.json' => jsonResponse(['result' => ['name' => 'record_vehicle_created']]),
         '/files/scan.pdf' => pdfResponse(),
     ]);
     $app = app($fake, $dir, writeConfirmedPolicyData: true);
 
     $extracted = $app->handle('123', '0', daktelaAccessToken('123'));
+    unlink($dir . '/var/policies/files_scan.pdf');
     $confirmed = $app->handle(
         '123',
         '0',
@@ -274,6 +276,10 @@ test('confirmed policy data updates matching CRM record using form registration 
     assertSameValue('Manualna marka', $body['customFields']['marka']);
     assertSameValue('POL-123', $body['customFields']['nr_polisy']);
     assertSameValue('FORM-REG', $cache->confirmed('123', $attachment)?->field('nr_rejestracyjny'));
+    assertSameValue(2, count(array_filter(
+        $fake->requests,
+        static fn (array $request): bool => parse_url($request['url'], PHP_URL_PATH) === '/files/scan.pdf'
+    )));
 });
 
 
@@ -399,6 +405,7 @@ test('duplicate vehicle CRM records abort confirmation and do not save confirmed
             ],
         ]),
         '/api/v6/crmRecords/record_policy.json' => jsonResponse(['result' => ['name' => 'record_policy']]),
+        '/api/v6/crmRecords/record_policy/attachments.json' => existingTestPolicyAttachmentResponse('scan.pdf'),
         '/files/scan.pdf' => pdfResponse(),
     ]);
     $app = app($fake, $dir, writeConfirmedPolicyData: true);

@@ -13,6 +13,7 @@ use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataCache;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataExtractor;
 use Ingreen\DaktelaPolicy\PolicyExtraction\TicketPolicyDataWriter;
 use Ingreen\DaktelaPolicy\PolicyExtraction\TicketPolicyValuesProvider;
+use Ingreen\DaktelaPolicy\PolicyFiles\PolicyPdfMaterializer;
 use Ingreen\DaktelaPolicy\Support\AppException;
 use Throwable;
 
@@ -25,6 +26,7 @@ final class WebhookApp
         private readonly AppConfig $config,
         UtilityTabSignatureVerifier $tabSignatureVerifier,
         private readonly TicketPdfAttachments $ticketPdfAttachments,
+        private readonly PolicyPdfMaterializer $policyPdfMaterializer,
         private readonly PolicyDataExtractor $policyDataExtractor,
         private readonly AppLogger $logger,
         private readonly ?TicketPolicyValuesProvider $ticketPolicyValuesProvider = null,
@@ -152,41 +154,22 @@ final class WebhookApp
 
         $attachments = $this->ticketPdfAttachments->forTicket($ticketId);
         $attachment = $this->ticketPdfAttachments->byIndex($attachments, $attachmentIndex);
-        $path = $this->policyFilePath($attachment, $attachmentIndex);
+        $policyPdf = $this->policyPdfMaterializer->cachedOrDownload($attachment, $attachmentIndex);
+        $body = $this->policyPdfMaterializer->contents($policyPdf);
 
-        if (!is_file($path)) {
-            $download = $this->ticketPdfAttachments->download($attachment, $this->config->maxDownloadBytes);
-
-            if (!$this->looksLikePdf($download['body'], $download['contentType'], $attachment)) {
-                throw new AppException(422, 'attachment_is_not_pdf', 'Downloaded attachment does not look like a PDF.', [
-                    'file' => $attachment['file'],
-                    'contentType' => $download['contentType'],
-                    'attachmentType' => $attachment['type'] ?? null,
-                ]);
-            }
-
-            $path = $this->storePolicyFile($attachment, $attachmentIndex, $download['body']);
-
-            $this->logger->info('Policy attachment stored for PDF preview.', [
-                'requestId' => $requestId,
-                'entityType' => 'ticket',
-                'entityId' => $ticketId,
-                'attachmentFile' => $attachment['file'],
-                'storedPath' => $path,
-            ]);
-        }
-
-        $body = file_get_contents($path);
-
-        if ($body === false) {
-            throw new AppException(500, 'policy_pdf_not_readable', 'Policy PDF file is not readable.', ['path' => $path]);
-        }
+        $this->logger->info('Policy attachment prepared for PDF preview.', [
+            'requestId' => $requestId,
+            'entityType' => 'ticket',
+            'entityId' => $ticketId,
+            'attachmentFile' => $attachment['file'],
+            'storedPath' => $policyPdf->path,
+        ]);
 
         return [
             'status' => 200,
             'headers' => $this->accessGuard->securityHeaders([
                 'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'inline; filename="' . addcslashes($this->downloadFilename($attachment), "\\\"") . '"',
+                'Content-Disposition' => 'inline; filename="' . addcslashes($policyPdf->downloadFilename(), "\\\"") . '"',
             ]),
             'body' => $body,
         ];
@@ -282,27 +265,17 @@ final class WebhookApp
                 }
             }
 
-            $download = $this->ticketPdfAttachments->download($attachment, $this->config->maxDownloadBytes);
-
-            if (!$this->looksLikePdf($download['body'], $download['contentType'], $attachment)) {
-                throw new AppException(422, 'attachment_is_not_pdf', 'Downloaded attachment does not look like a PDF.', [
-                    'file' => $attachment['file'],
-                    'contentType' => $download['contentType'],
-                    'attachmentType' => $attachment['type'] ?? null,
-                ]);
-            }
-
-            $path = $this->storePolicyFile($attachment, $attachmentIndex, $download['body']);
+            $policyPdf = $this->policyPdfMaterializer->downloadFresh($attachment, $attachmentIndex);
 
             $this->logger->info('Policy attachment stored for Claude extraction.', [
                 'requestId' => $requestId,
                 'entityType' => 'ticket',
                 'entityId' => $ticketId,
                 'attachmentFile' => $attachment['file'],
-                'storedPath' => $path,
+                'storedPath' => $policyPdf->path,
             ]);
 
-            $extractedData = $this->policyDataExtractor->extract($path);
+            $extractedData = $this->policyDataExtractor->extract($policyPdf->path);
             $extractedData = $confirmationForm?->applyLockedValues($extractedData) ?? $extractedData;
             $this->policyDataCache->savePending($ticketId, $attachment, $extractedData);
 
@@ -311,7 +284,7 @@ final class WebhookApp
                 'entityType' => 'ticket',
                 'entityId' => $ticketId,
                 'attachmentFile' => $attachment['file'],
-                'storedPath' => $path,
+                'storedPath' => $policyPdf->path,
             ]);
 
             return [
@@ -410,7 +383,8 @@ final class WebhookApp
             ]);
 
             if ($this->confirmedPolicyDataWriter !== null) {
-                $this->confirmedPolicyDataWriter->saveConfirmedPolicyData($ticketId, $extractedData);
+                $policyPdf = $this->policyPdfMaterializer->cachedOrDownload($attachment, $attachmentIndex);
+                $this->confirmedPolicyDataWriter->saveConfirmedPolicyData($ticketId, $extractedData, $policyPdf);
             } else {
                 $this->ticketPolicyDataWriter?->updateTicketPolicyData($ticketId, $extractedData);
             }
@@ -534,57 +508,6 @@ final class WebhookApp
         ];
     }
 
-    /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
-     */
-    private function storePolicyFile(array $attachment, string $attachmentIndex, string $body): string
-    {
-        $directory = rtrim($this->config->varDir, '/\\') . '/policies';
-
-        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
-            throw new AppException(500, 'policy_temp_dir_failed', 'Could not create temporary policy directory.', [
-                'directory' => $directory,
-            ]);
-        }
-
-        $path = $this->policyFilePath($attachment, $attachmentIndex);
-
-        if (file_put_contents($path, $body, LOCK_EX) === false) {
-            throw new AppException(500, 'policy_temp_write_failed', 'Could not write temporary policy file.', [
-                'path' => $path,
-            ]);
-        }
-
-        return $path;
-    }
-
-    /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
-     */
-    private function policyFilePath(array $attachment, string $attachmentIndex): string
-    {
-        return rtrim($this->config->varDir, '/\\') . '/policies/' . $this->temporaryPolicyFilename($attachment, $attachmentIndex);
-    }
-
-    /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
-     */
-    private function temporaryPolicyFilename(array $attachment, string $attachmentIndex): string
-    {
-        $id = $attachment['id'] ?? $attachment['name'] ?? null;
-
-        if ($id === null && ctype_digit($attachment['file'])) {
-            $id = $attachment['file'];
-        }
-
-        $id = preg_replace('/[^A-Za-z0-9._-]+/', '_', (string) ($id ?? 'attachment-' . $attachmentIndex));
-        $id = trim((string) $id, '._-');
-
-        $filename = $id !== '' ? $id : 'attachment-' . $attachmentIndex;
-
-        return str_ends_with(strtolower($filename), '.pdf') ? $filename : $filename . '.pdf';
-    }
-
     private function policyProcessingErrorMessage(Throwable $exception): string
     {
         if (!$exception instanceof AppException) {
@@ -603,6 +526,9 @@ final class WebhookApp
             'invalid_policy_crm_lookup_arguments' => 'Dane dla rekordu CRM polisy nie zostały zapisane. Uzupełnij numer rejestracyjny pojazdu i VIN w formularzu, a następnie spróbuj ponownie.',
             'multiple_policy_crm_records_found' => 'Dane dla rekordu CRM polisy nie zostały zapisane. Znaleziono więcej niż jeden pasujący rekord CRM polisy dla numeru rejestracyjnego lub VIN. Usuń zbędne rekordy CRM polis tak, aby pozostał tylko jeden, a następnie spróbuj ponownie.',
             'daktela_policy_crm_save_failed' => 'Nie udało się zapisać danych do rekordu CRM polisy w Daktela.',
+            'daktela_policy_attachment_upload_failed' => 'Nie udało się przesłać pliku polisy do Daktela.',
+            'invalid_daktela_attachment_upload_response' => 'Daktela zwróciła nieprawidłową odpowiedź podczas przesyłania pliku polisy.',
+            'daktela_policy_attachment_save_failed' => 'Nie udało się dołączyć pliku polisy do rekordu CRM polisy w Daktela.',
             'multiple_vehicle_crm_records_found' => 'Dane dla rekordu CRM pojazdu nie zostały zapisane. Znaleziono więcej niż jeden pasujący rekord CRM pojazdu dla numeru rejestracyjnego lub VIN. Usuń zbędne rekordy CRM pojazdów tak, aby pozostał tylko jeden, a następnie spróbuj ponownie.',
             'daktela_vehicle_crm_save_failed' => 'Nie udało się zapisać danych do rekordu CRM pojazdu w Daktela.',
             'claude_policy_extraction_failed' => $this->claudePolicyExtractionErrorMessage($exception),
@@ -708,44 +634,6 @@ final class WebhookApp
         }
 
         return trim($ticketId);
-    }
-
-    /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
-     */
-    private function looksLikePdf(string $body, ?string $contentType, array $attachment): bool
-    {
-        return str_starts_with(ltrim(substr($body, 0, 1024)), '%PDF')
-            || ($contentType !== null && str_contains(strtolower($contentType), 'pdf') && $this->hasPdfExtension($attachment))
-            || ($this->hasPdfType($attachment) && $this->hasPdfExtension($attachment));
-    }
-
-    /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
-     */
-    private function hasPdfType(array $attachment): bool
-    {
-        return isset($attachment['type']) && is_string($attachment['type']) && str_contains(strtolower($attachment['type']), 'pdf');
-    }
-
-    /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
-     */
-    private function hasPdfExtension(array $attachment): bool
-    {
-        return preg_match('/\.pdf(?:$|[?#])/i', $attachment['file']) === 1
-            || (isset($attachment['title']) && preg_match('/\.pdf$/i', (string) $attachment['title']) === 1);
-    }
-
-    /**
-     * @param array{file:string,title?:string|null,type?:string|null,id?:string|null,name?:string|null,previewUrl?:string|null} $attachment
-     */
-    private function downloadFilename(array $attachment): string
-    {
-        $filename = $attachment['title'] ?? basename(parse_url($attachment['file'], PHP_URL_PATH) ?: 'attachment.pdf');
-        $filename = preg_replace('/[^A-Za-z0-9._-]+/', '_', $filename) ?: 'attachment.pdf';
-
-        return str_ends_with(strtolower($filename), '.pdf') ? $filename : $filename . '.pdf';
     }
 
     /**

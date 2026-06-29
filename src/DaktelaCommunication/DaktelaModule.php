@@ -4,20 +4,25 @@ declare(strict_types=1);
 
 namespace Ingreen\DaktelaPolicy\DaktelaCommunication;
 
-use Ingreen\DaktelaPolicy\DaktelaCommunication\Services\DaktelaCommunicationService;
+use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\AttachPolicyPdfToCrmRecord;
+use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\CreatePolicyCrmAttachment;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\CreatePolicyCrmRecord;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\CreateVehicleCrmRecord;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\FindCrmRecordIdentifiersByTitle;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\GetCrmRecordsByTicketId;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\GetTicketByName;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\GetTicketAttachments;
+use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\HasPolicyCrmAttachment;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\UpdatePolicyCrmRecord;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\UpdateVehicleCrmRecord;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\UpdateTicketPolicyData;
+use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\UploadPolicyPdf;
+use Ingreen\DaktelaPolicy\DaktelaCommunication\Services\DaktelaCommunicationService;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\PolicyExtraction\ConfirmedPolicyDataWriter;
 use Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData;
 use Ingreen\DaktelaPolicy\PolicyExtraction\TicketPolicyDataWriter;
+use Ingreen\DaktelaPolicy\PolicyFiles\PolicyPdf;
 use Ingreen\DaktelaPolicy\Support\AppException;
 use Ingreen\DaktelaPolicy\TicketAttachmentProvider;
 
@@ -28,6 +33,7 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
 
     private readonly DaktelaCommunicationService $service;
     private readonly ?AppLogger $logger;
+    private readonly AttachPolicyPdfToCrmRecord $attachPolicyPdfToCrmRecord;
     private readonly CreatePolicyCrmRecord $createPolicyCrmRecord;
     private readonly CreateVehicleCrmRecord $createVehicleCrmRecord;
     private readonly FindCrmRecordIdentifiersByTitle $findCrmRecordIdentifiersByTitle;
@@ -39,7 +45,7 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
     private readonly UpdateTicketPolicyData $updateTicketPolicyData;
 
     /**
-     * @param null|callable(string, string, array<string, string>, ?string): array{status:int,headers:array<string,string>,body:string} $requester
+     * @param null|callable(string, string, array<string, string>, string|array<string,\CURLFile>|null): array{status:int,headers:array<string,string>,body:string} $requester
      */
     public function __construct(
         string $baseUrl,
@@ -49,6 +55,12 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
     ) {
         $this->service = new DaktelaCommunicationService($baseUrl, $apiToken, $requester);
         $this->logger = $logger;
+        $this->attachPolicyPdfToCrmRecord = new AttachPolicyPdfToCrmRecord(
+            new HasPolicyCrmAttachment($this->service),
+            new UploadPolicyPdf($this->service),
+            new CreatePolicyCrmAttachment($this->service),
+            $logger
+        );
         $this->getCrmRecordsByTicketId = new GetCrmRecordsByTicketId($this->service, $logger);
         $this->createPolicyCrmRecord = new CreatePolicyCrmRecord($this->service);
         $this->createVehicleCrmRecord = new CreateVehicleCrmRecord($this->service);
@@ -79,7 +91,7 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
     /**
      * @return array<string, mixed>
      */
-    public function saveConfirmedPolicyData(string $ticketId, ExtractedPolicyData $data): array
+    public function saveConfirmedPolicyData(string $ticketId, ExtractedPolicyData $data, PolicyPdf $policyPdf): array
     {
         $this->logger?->info('Confirmed policy save started.', [
             'ticketId' => $ticketId,
@@ -100,6 +112,9 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
         ]);
 
         $policyCrmResponse = $this->savePolicyCrmRecord($ticketId, $data, $ticket, $registrationNumber, $vin);
+        $policyCrmRecordIdentifier = $this->requiredResultName($policyCrmResponse);
+
+        $this->attachPolicyPdfToCrmRecord->execute($ticketId, $policyCrmRecordIdentifier, $policyPdf);
 
         $this->saveVehicleCrmRecord($ticketId, $data, $ticket, $registrationNumber, $vin);
 
@@ -407,5 +422,19 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
         $name = trim((string) $name);
 
         return $name !== '' ? $name : null;
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     */
+    private function requiredResultName(array $payload): string
+    {
+        $name = $this->resultName($payload);
+
+        if ($name === null) {
+            throw new AppException(502, 'invalid_daktela_response', 'Daktela CRM response did not contain a record identifier.');
+        }
+
+        return $name;
     }
 }

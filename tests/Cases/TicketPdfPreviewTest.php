@@ -53,7 +53,7 @@ test('policy PDF preview is served from local policy storage', function (): void
 
     assertSameValue(200, $preview['status']);
     assertSameValue('application/pdf', $preview['headers']['Content-Type']);
-    assertTrueValue(str_starts_with($preview['headers']['Content-Disposition'], 'inline;'));
+    assertSameValue('inline; filename="policy.pdf"', $preview['headers']['Content-Disposition']);
     assertSameValue("%PDF-1.4\npreview", $preview['body']);
     assertSameValue("%PDF-1.4\npreview", $cachedPreview['body']);
     assertSameValue("%PDF-1.4\npreview", file_get_contents($dir . '/var/policies/policy-123.pdf'));
