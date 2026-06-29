@@ -1,6 +1,7 @@
 /vendor/
 /credentials/*
 !/credentials/*.example.php
+!/credentials/AGENTS.md
 /var/
 !/var/cache/.gitkeep
 *.log
