@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers;
 
+use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaNumericValueNormalizer;
 use Ingreen\DaktelaPolicy\Logging\AppLogger;
 use Ingreen\DaktelaPolicy\Support\AppException;
 
@@ -14,6 +15,7 @@ final class FindCrmRecordIdentifiersByTitle
 {
     public function __construct(
         private readonly GetCrmRecordsByTicketId $getCrmRecordsByTicketId,
+        private readonly DaktelaNumericValueNormalizer $valueNormalizer = new DaktelaNumericValueNormalizer(),
         private readonly ?AppLogger $logger = null
     ) {
     }
@@ -31,9 +33,8 @@ final class FindCrmRecordIdentifiersByTitle
         string $invalidLookupErrorCode,
         string $invalidLookupMessage
     ): array {
-        $registrationNumber = $this->requiredLookupValue(
+        $registrationNumber = $this->requiredRegistrationNumberValue(
             $registrationNumber,
-            'registrationNumber',
             $invalidLookupErrorCode,
             $invalidLookupMessage
         );
@@ -50,6 +51,22 @@ final class FindCrmRecordIdentifiersByTitle
         }
 
         return $recordIdentifiers;
+    }
+
+    private function requiredRegistrationNumberValue(
+        string $value,
+        string $errorCode,
+        string $message
+    ): string {
+        $value = $this->valueNormalizer->normalizeForField('nr_rejestracyjny', $value);
+
+        if ($value === null || $value === '') {
+            throw new AppException(400, $errorCode, $message, [
+                'field' => 'registrationNumber',
+            ]);
+        }
+
+        return $value;
     }
 
     private function requiredLookupValue(
@@ -97,7 +114,7 @@ final class FindCrmRecordIdentifiersByTitle
             return false;
         }
 
-        return $this->fieldMatches($customFields['nr_rejestracyjny'] ?? null, $registrationNumber)
+        return $this->fieldMatches($customFields['nr_rejestracyjny'] ?? null, $registrationNumber, true)
             || $this->fieldMatches($customFields['vin'] ?? null, $vin);
     }
 
@@ -124,12 +141,25 @@ final class FindCrmRecordIdentifiersByTitle
         return $this->scalarString($type['title'] ?? null);
     }
 
-    private function fieldMatches(mixed $recordValue, string $lookupValue): bool
+    private function fieldMatches(mixed $recordValue, string $lookupValue, bool $stripSpaces = false): bool
     {
         $recordValue = $this->scalarString($recordValue);
 
-        return $recordValue !== null
-            && $this->normalize($recordValue) === $this->normalize($lookupValue);
+        if ($recordValue === null) {
+            return false;
+        }
+
+        if ($stripSpaces) {
+            $recordValue = $this->normalizeRegistrationNumber($recordValue);
+            $lookupValue = $this->normalizeRegistrationNumber($lookupValue);
+
+            return $recordValue !== null && $lookupValue !== null && $recordValue === $lookupValue;
+        } else {
+            $recordValue = $this->normalize($recordValue);
+            $lookupValue = $this->normalize($lookupValue);
+        }
+
+        return $recordValue === $lookupValue;
     }
 
     private function scalarString(mixed $value): ?string
@@ -169,6 +199,13 @@ final class FindCrmRecordIdentifiersByTitle
         $value = trim($value);
 
         return function_exists('mb_strtoupper') ? mb_strtoupper($value, 'UTF-8') : strtoupper($value);
+    }
+
+    private function normalizeRegistrationNumber(string $value): ?string
+    {
+        $value = $this->valueNormalizer->normalizeForField('nr_rejestracyjny', $value);
+
+        return $value === null ? null : $this->normalize($value);
     }
 
     /**

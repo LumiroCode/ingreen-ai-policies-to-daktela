@@ -32,6 +32,7 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
 
     private readonly DaktelaCommunicationService $service;
     private readonly ?AppLogger $logger;
+    private readonly DaktelaNumericValueNormalizer $valueNormalizer;
     private readonly CreatePolicyCrmRecord $createPolicyCrmRecord;
     private readonly CreateVehicleCrmRecord $createVehicleCrmRecord;
     private readonly FindCrmRecordIdentifiersByTitle $findCrmRecordIdentifiersByTitle;
@@ -54,6 +55,7 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
     ) {
         $this->service = new DaktelaCommunicationService($baseUrl, $apiToken, $requester);
         $this->logger = $logger;
+        $this->valueNormalizer = new DaktelaNumericValueNormalizer();
         $this->preparePolicyCrmAttachment = new PreparePolicyCrmAttachment(
             new HasPolicyCrmAttachment($this->service),
             new UploadPolicyPdf($this->service),
@@ -62,7 +64,11 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
         $this->getCrmRecordsByTicketId = new GetCrmRecordsByTicketId($this->service, $logger);
         $this->createPolicyCrmRecord = new CreatePolicyCrmRecord($this->service);
         $this->createVehicleCrmRecord = new CreateVehicleCrmRecord($this->service);
-        $this->findCrmRecordIdentifiersByTitle = new FindCrmRecordIdentifiersByTitle($this->getCrmRecordsByTicketId, $logger);
+        $this->findCrmRecordIdentifiersByTitle = new FindCrmRecordIdentifiersByTitle(
+            $this->getCrmRecordsByTicketId,
+            $this->valueNormalizer,
+            $logger
+        );
         $this->getTicketByName = new GetTicketByName($this->service);
         $this->getTicketAttachments = new GetTicketAttachments($this->service, $logger);
         $this->updatePolicyCrmRecord = new UpdatePolicyCrmRecord($this->service);
@@ -332,15 +338,15 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
 
     private function requiredCrmLookupField(ExtractedPolicyData $data, string $field, string $errorCode): string
     {
-        $value = $data->field($field);
+        $value = $this->valueNormalizer->normalizeForField($field, $data->field($field));
 
-        if ($value === null || trim($value) === '') {
+        if ($value === null || $value === '') {
             throw new AppException(400, $errorCode, 'CRM lookup requires registration number and VIN.', [
                 'field' => $field,
             ]);
         }
 
-        return trim($value);
+        return $value;
     }
 
     /**
@@ -403,10 +409,11 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
      */
     private function lookupDiagnostics(string $registrationNumber, string $vin): array
     {
+        $registrationNumber = $this->valueNormalizer->normalizeForField('nr_rejestracyjny', $registrationNumber) ?? '';
         $vin = trim($vin);
 
         return [
-            'registrationNumber' => trim($registrationNumber),
+            'registrationNumber' => $registrationNumber,
             'vinLength' => strlen($vin),
             'vinSuffix' => $vin === '' ? '' : substr($vin, -6),
             'vinSha256' => hash('sha256', $vin),

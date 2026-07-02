@@ -7,6 +7,15 @@ namespace Ingreen\DaktelaPolicy\DaktelaCommunication;
 final class DaktelaNumericValueNormalizer
 {
     /**
+     * Fields that must be serialized without internal whitespace before they are sent to Daktela.
+     *
+     * @var list<string>
+     */
+    private const WHITESPACE_STRIPPED_FIELDS = [
+        'nr_rejestracyjny',
+    ];
+
+    /**
      * Numeric fields that must be serialized as plain numbers before they are sent to Daktela.
      *
      * @var list<string>
@@ -29,6 +38,10 @@ final class DaktelaNumericValueNormalizer
 
     public function normalizeForField(string $field, mixed $value): ?string
     {
+        if (in_array($field, self::WHITESPACE_STRIPPED_FIELDS, true)) {
+            return $this->normalizeWhitespaceStrippedValue($value);
+        }
+
         if (!in_array($field, self::NUMERIC_FIELDS, true)) {
             return $this->trimScalarValue($value);
         }
@@ -95,6 +108,23 @@ final class DaktelaNumericValueNormalizer
         }
 
         return $normalized;
+    }
+
+    private function normalizeWhitespaceStrippedValue(mixed $value): ?string
+    {
+        $value = $this->trimScalarValue($value);
+
+        if ($value === null) {
+            return null;
+        }
+
+        $value = preg_replace('/[\s\x{00A0}]+/u', '', $value);
+
+        if (!is_string($value) || $value === '') {
+            return null;
+        }
+
+        return $value;
     }
 
     private function trimScalarValue(mixed $value): ?string
