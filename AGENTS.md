@@ -1,6 +1,6 @@
 Be smart about what you do. Notice small things and interdependencies. Think about the consequences of your actions in scope of current and future state of the project.
 
-Keep code split by responsibilities. Clear-cut the interfaces between parts or modules and make them explicit. Prefer modularity and maintainability. Avoid code duplications. Abstract away the details. Use layers of logic. Make data flow in one direction always. Follow each: SOLID, CQRS, DRY, KISS and YAGNI. Think, think, think. Refactor often. Foster single source of truth for operations, switches, and data in code.
+Keep code split by responsibilities. Clear-cut the interfaces between parts or modules and make them explicit. Prefer modularity and maintainability. Avoid code duplications. Abstract away the details. Use layers of logic. Make data flow in one direction always. Follow each: SOLID, CQRS, DRY, KISS and YAGNI. Prefere separate methods instead of overloading with flags. Think, think, think. Refactor often. Foster single source of truth for operations, switches, and data in code.
 
 Be surgically precise and make only minimal changes needed to fulfil the goal and instructions.
 
