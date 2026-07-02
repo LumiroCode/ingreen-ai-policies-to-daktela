@@ -6,6 +6,6 @@ Keep code split by responsibilities. Clear-cut the interfaces between parts or m
 
 Be surgically precise and make only minimal changes needed to fulfil the goal and instructions.
 
-Work in an incremental manner - proof of concept (absolutely minimal code) > minimal value product (only one, singular base value we want to take from a feature, little code) > working feature > refactored code > optimised code. Always keep the code in a working state.
+Work in an incremental manner to achieve sequential refinement - proof of concept (absolutely minimal code) > minimal value product (only one, singular base value we want to take from a feature, little code) > working feature > refactored code > optimised code. Always keep the code in a working state.
 
 Perform self-review of the changes you make. Be your own critic. Ask yourself: "Does this code foster rules imposed in instructions? Does it make it easy to make changes in behaviour with small edits?".
