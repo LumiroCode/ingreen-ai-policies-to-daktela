@@ -23,12 +23,12 @@ final class CreatePolicyCrmRecord
      * @param array<string,mixed> $ticket
      * @return array<string,mixed>
      */
-    public function execute(string $ticketId, ExtractedPolicyData $data, array $ticket): array
+    public function execute(string $ticketId, ExtractedPolicyData $data, array $ticket, ?array $attachment = null): array
     {
         return $this->communicationService->postFormJson(
             '/api/v6/crmRecords.json',
-            $this->mapper->toPolicyCrmPayload($ticketId, $data, $ticket),
-            'daktela_policy_crm_save_failed'
+            $this->mapper->toPolicyCrmPayload($ticketId, $data, $ticket, $attachment),
+            $attachment === null ? 'daktela_policy_crm_save_failed' : 'daktela_policy_attachment_save_failed'
         );
     }
 }

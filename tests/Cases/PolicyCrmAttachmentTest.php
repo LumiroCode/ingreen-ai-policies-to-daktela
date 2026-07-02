@@ -31,13 +31,6 @@ test('Daktela module uploads and attaches policy PDF before saving vehicle recor
                 'name' => ($payload['title'] ?? null) === 'Pojazdy' ? 'record_vehicle' : 'record_policy',
             ]]);
         },
-        '/api/v6/crmRecords/record_policy/attachments.json' => function (string $method, string $url, array $headers, mixed $body): array {
-            if ($method === 'GET') {
-                return jsonResponse(['result' => ['data' => []]]);
-            }
-
-            return jsonResponse(['result' => ['file' => 'attachment_1']], 201);
-        },
         '/file/upload.php' => [
             'status' => 200,
             'headers' => ['Content-Type' => 'application/json'],
@@ -55,11 +48,15 @@ test('Daktela module uploads and attaches policy PDF before saving vehicle recor
         $fake->requests,
         static fn (array $request): bool => parse_url($request['url'], PHP_URL_PATH) === '/file/upload.php'
     ));
-    $attachmentWrites = array_values(array_filter(
-        $fake->requests,
-        static fn (array $request): bool => $request['method'] === 'POST'
-            && parse_url($request['url'], PHP_URL_PATH) === '/api/v6/crmRecords/record_policy/attachments.json'
-    ));
+    $policyWrites = array_values(array_filter($fake->requests, static function (array $request): bool {
+        if ($request['method'] !== 'POST' || parse_url($request['url'], PHP_URL_PATH) !== '/api/v6/crmRecords.json') {
+            return false;
+        }
+
+        parse_str((string) $request['body'], $payload);
+
+        return ($payload['title'] ?? null) === 'Polisy';
+    }));
 
     assertSameValue(1, count($upload));
     parse_str(parse_url($upload[0]['url'], PHP_URL_QUERY) ?: '', $uploadQuery);
@@ -71,12 +68,15 @@ test('Daktela module uploads and attaches policy PDF before saving vehicle recor
     assertSameValue('policy document.pdf', $upload[0]['body']['files']->getPostFilename());
     assertSameValue('application/pdf', $upload[0]['body']['files']->getMimeType());
 
-    assertSameValue(1, count($attachmentWrites));
-    parse_str((string) $attachmentWrites[0]['body'], $attachmentPayload);
-    assertSameValue('temporary-policy.pdf', $attachmentPayload['file']['name']);
-    assertSameValue('policy document.pdf', $attachmentPayload['file']['title']);
+    assertSameValue(1, count($policyWrites));
+    parse_str((string) $policyWrites[0]['body'], $policyPayload);
+    assertSameValue('temporary-policy.pdf', $policyPayload['add_files'][0]['name']);
+    assertSameValue('policy document.pdf', $policyPayload['add_files'][0]['title']);
+    assertSameValue('application/pdf', $policyPayload['add_files'][0]['type']);
+    assertSameValue($pdf->size, (int) $policyPayload['add_files'][0]['size']);
 
-    $attachmentWriteIndex = array_search($attachmentWrites[0], $fake->requests, true);
+    $uploadIndex = array_search($upload[0], $fake->requests, true);
+    $policyWriteIndex = array_search($policyWrites[0], $fake->requests, true);
     $vehicleWriteIndex = null;
     foreach ($fake->requests as $index => $request) {
         if ($request['method'] !== 'POST' || parse_url($request['url'], PHP_URL_PATH) !== '/api/v6/crmRecords.json') {
@@ -90,7 +90,54 @@ test('Daktela module uploads and attaches policy PDF before saving vehicle recor
         }
     }
 
-    assertTrueValue(is_int($attachmentWriteIndex) && is_int($vehicleWriteIndex) && $attachmentWriteIndex < $vehicleWriteIndex);
+    assertTrueValue(
+        is_int($uploadIndex)
+        && is_int($policyWriteIndex)
+        && is_int($vehicleWriteIndex)
+        && $uploadIndex < $policyWriteIndex
+        && $policyWriteIndex < $vehicleWriteIndex
+    );
+});
+
+
+test('Daktela module includes uploaded PDF in existing policy CRM record update', function (): void {
+    $pdf = testPolicyPdf('existing-policy.pdf');
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123.json' => jsonResponse(['result' => [
+            'name' => '123',
+            'user' => ['name' => 'agent_1'],
+            'customFields' => ['pochodzenie_polisy' => 'Dealer'],
+        ]]),
+        '/api/v6/crmRecords' => jsonResponse(['result' => ['data' => [[
+            'name' => 'record_policy',
+            'title' => 'Polisy',
+            'customFields' => [
+                'nr_rejestracyjny' => 'WX12345',
+                'vin' => 'TMB123',
+            ],
+        ]]]]),
+        '/api/v6/crmRecords/record_policy/attachments.json' => jsonResponse(['result' => ['data' => []]]),
+        '/api/v6/crmRecords/record_policy.json' => jsonResponse(['result' => ['name' => 'record_policy']]),
+        '/api/v6/crmRecords.json' => jsonResponse(['result' => ['name' => 'record_vehicle']]),
+        '/file/upload.php' => successfulTestPolicyUploadResponse(),
+    ]);
+    $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
+
+    $module->saveConfirmedPolicyData('123', ExtractedPolicyData::fromFields([
+        'nr_rejestracyjny' => 'WX12345',
+        'vin' => 'TMB123',
+    ], '{}'), $pdf);
+
+    $policyUpdates = array_values(array_filter(
+        $fake->requests,
+        static fn (array $request): bool => $request['method'] === 'PUT'
+            && parse_url($request['url'], PHP_URL_PATH) === '/api/v6/crmRecords/record_policy.json'
+    ));
+    assertSameValue(1, count($policyUpdates));
+    parse_str((string) $policyUpdates[0]['body'], $payload);
+    assertSameValue('temporary-policy.pdf', $payload['add_files'][0]['name']);
+    assertSameValue('existing-policy.pdf', $payload['add_files'][0]['title']);
+    assertSameValue($pdf->size, (int) $payload['add_files'][0]['size']);
 });
 
 
@@ -102,8 +149,16 @@ test('Daktela module skips upload when policy attachment filename and size alrea
             'user' => ['name' => 'agent_1'],
             'customFields' => ['pochodzenie_polisy' => 'Dealer'],
         ]]),
-        '/api/v6/crmRecords' => jsonResponse(['result' => ['data' => []]]),
-        '/api/v6/crmRecords.json' => jsonResponse(['result' => ['name' => 'record_policy']]),
+        '/api/v6/crmRecords' => jsonResponse(['result' => ['data' => [[
+            'name' => 'record_policy',
+            'title' => 'Polisy',
+            'customFields' => [
+                'nr_rejestracyjny' => 'WX12345',
+                'vin' => 'TMB123',
+            ],
+        ]]]]),
+        '/api/v6/crmRecords/record_policy.json' => jsonResponse(['result' => ['name' => 'record_policy']]),
+        '/api/v6/crmRecords.json' => jsonResponse(['result' => ['name' => 'record_vehicle']]),
         '/api/v6/crmRecords/record_policy/attachments.json' => existingTestPolicyAttachmentResponse('same.pdf'),
     ]);
     $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
@@ -213,11 +268,12 @@ test('policy attachment failure stops vehicle save', function (): void {
             'customFields' => ['pochodzenie_polisy' => 'Dealer'],
         ]]),
         '/api/v6/crmRecords' => jsonResponse(['result' => ['data' => []]]),
-        '/api/v6/crmRecords.json' => jsonResponse(['result' => ['name' => 'record_policy']]),
-        '/api/v6/crmRecords/record_policy/attachments.json' => function (string $method): array {
-            return $method === 'GET'
-                ? jsonResponse(['result' => ['data' => []]])
-                : jsonResponse(['error' => [['message' => 'failed']]], 500);
+        '/api/v6/crmRecords.json' => function (string $method, string $url, array $headers, mixed $body): array {
+            parse_str((string) $body, $payload);
+
+            return ($payload['title'] ?? null) === 'Polisy'
+                ? jsonResponse(['error' => [['message' => 'failed']]], 500)
+                : jsonResponse(['result' => ['name' => 'record_vehicle']]);
         },
         '/file/upload.php' => [
             'status' => 200,
@@ -252,10 +308,10 @@ test('policy attachment failure stops vehicle save', function (): void {
 });
 
 
-test('retry after attachment failure reuses created policy record and completes attachment', function (): void {
+test('retry after policy attachment save failure uploads again and completes policy creation', function (): void {
     $pdf = testPolicyPdf();
     $attempt = 0;
-    $attachmentWrites = 0;
+    $policyWrites = 0;
     $fake = new FakeDaktela([
         '/api/v6/tickets/123.json' => function () use (&$attempt): array {
             $attempt++;
@@ -266,34 +322,19 @@ test('retry after attachment failure reuses created policy record and completes 
                 'customFields' => ['pochodzenie_polisy' => 'Dealer'],
             ]]);
         },
-        '/api/v6/crmRecords' => function () use (&$attempt): array {
-            return jsonResponse(['result' => ['data' => $attempt === 1 ? [] : [[
-                'name' => 'record_policy',
-                'title' => 'Polisy',
-                'customFields' => [
-                    'nr_rejestracyjny' => 'WX12345',
-                    'vin' => 'TMB123',
-                ],
-            ]]]]);
-        },
-        '/api/v6/crmRecords.json' => function (string $method, string $url, array $headers, mixed $body): array {
+        '/api/v6/crmRecords' => jsonResponse(['result' => ['data' => []]]),
+        '/api/v6/crmRecords.json' => function (string $method, string $url, array $headers, mixed $body) use (&$policyWrites): array {
             parse_str((string) $body, $payload);
 
-            return jsonResponse(['result' => [
-                'name' => ($payload['title'] ?? null) === 'Pojazdy' ? 'record_vehicle' : 'record_policy',
-            ]]);
-        },
-        '/api/v6/crmRecords/record_policy.json' => jsonResponse(['result' => ['name' => 'record_policy']]),
-        '/api/v6/crmRecords/record_policy/attachments.json' => function (string $method) use (&$attachmentWrites): array {
-            if ($method === 'GET') {
-                return jsonResponse(['result' => ['data' => []]]);
+            if (($payload['title'] ?? null) === 'Pojazdy') {
+                return jsonResponse(['result' => ['name' => 'record_vehicle']]);
             }
 
-            $attachmentWrites++;
+            $policyWrites++;
 
-            return $attachmentWrites === 1
+            return $policyWrites === 1
                 ? jsonResponse(['error' => [['message' => 'failed']]], 500)
-                : jsonResponse(['result' => ['file' => 'attachment_1']], 201);
+                : jsonResponse(['result' => ['name' => 'record_policy']], 201);
         },
         '/file/upload.php' => [
             'status' => 200,
@@ -324,8 +365,8 @@ test('retry after attachment failure reuses created policy record and completes 
 
         return ($payload['title'] ?? null) === 'Polisy';
     });
-    assertSameValue(1, count($policyCreates));
-    assertSameValue(2, $attachmentWrites);
+    assertSameValue(2, count($policyCreates));
+    assertSameValue(2, $policyWrites);
 });
 
 
@@ -346,11 +387,12 @@ test('attachment failure leaves confirmation cache uncommitted', function (): vo
             'customFields' => ['pochodzenie_polisy' => 'Dealer'],
         ]]),
         '/api/v6/crmRecords' => jsonResponse(['result' => ['data' => []]]),
-        '/api/v6/crmRecords.json' => jsonResponse(['result' => ['name' => 'record_policy']]),
-        '/api/v6/crmRecords/record_policy/attachments.json' => function (string $method): array {
-            return $method === 'GET'
-                ? jsonResponse(['result' => ['data' => []]])
-                : jsonResponse(['error' => [['message' => 'failed']]], 500);
+        '/api/v6/crmRecords.json' => function (string $method, string $url, array $headers, mixed $body): array {
+            parse_str((string) $body, $payload);
+
+            return ($payload['title'] ?? null) === 'Polisy'
+                ? jsonResponse(['error' => [['message' => 'failed']]], 500)
+                : jsonResponse(['result' => ['name' => 'record_vehicle']]);
         },
         '/file/upload.php' => [
             'status' => 200,

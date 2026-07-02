@@ -49,6 +49,15 @@ function existingTestPolicyAttachmentResponse(string $title = 'policy.pdf', stri
     ]]]]);
 }
 
+function successfulTestPolicyUploadResponse(string $name = 'temporary-policy.pdf'): array
+{
+    return [
+        'status' => 200,
+        'headers' => ['Content-Type' => 'application/json'],
+        'body' => json_encode($name, JSON_THROW_ON_ERROR),
+    ];
+}
+
 function tempDir(): string
 {
     $dir = sys_get_temp_dir() . '/daktela-policy-test-' . bin2hex(random_bytes(4));

@@ -28,6 +28,13 @@ final class DaktelaVehicleCrmRecordMapper
         'adres_wspolposiadacza',
     ];
 
+    private readonly DaktelaNumericValueNormalizer $valueNormalizer;
+
+    public function __construct(?DaktelaNumericValueNormalizer $valueNormalizer = null)
+    {
+        $this->valueNormalizer = $valueNormalizer ?? new DaktelaNumericValueNormalizer();
+    }
+
     /**
      * @param array<string,mixed> $ticket
      * @return array<string,mixed>
@@ -65,13 +72,13 @@ final class DaktelaVehicleCrmRecordMapper
         $customFields = [];
 
         foreach (self::CUSTOM_FIELDS as $field) {
-            $value = $data->field($field);
+            $value = $this->valueNormalizer->normalizeForField($field, $data->field($field));
 
-            if ($value === null || trim($value) === '') {
+            if ($value === null) {
                 continue;
             }
 
-            $customFields[$field] = trim($value);
+            $customFields[$field] = $value;
         }
 
         return $customFields;

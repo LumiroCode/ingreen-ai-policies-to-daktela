@@ -63,11 +63,24 @@ test('Daktela ticket policy data mapper maps non-empty policy values to custom f
         'model' => '',
         'vin' => null,
         'nr_polisy' => 'POL-123',
+        'rocznik' => ' 2 026 ',
+        'przebieg' => '12 000 km',
+        'pojemnosc_silnika' => '1 798 cm3',
+        'wartosc_pojazdu_brutto' => '123 456,78 PLN',
+        'cena_pakietu' => '3 200 PLN',
     ], '{}');
 
     $payload = (new DaktelaTicketPolicyDataMapper())->toTicketPayload($data);
 
-    assertSameValue(['marka' => 'Tesla', 'nr_polisy' => 'POL-123'], $payload['customFields']);
+    assertSameValue([
+        'marka' => 'Tesla',
+        'nr_polisy' => 'POL-123',
+        'rocznik' => '2026',
+        'przebieg' => '12000',
+        'pojemnosc_silnika' => '1798',
+        'wartosc_pojazdu_brutto' => '123456.78',
+        'cena_pakietu' => '3200',
+    ], $payload['customFields']);
     assertArrayMissingKey('model', $payload['customFields']);
     assertArrayMissingKey('vin', $payload['customFields']);
 });
@@ -83,6 +96,11 @@ test('Daktela module updates ticket policy data through form-encoded custom fiel
         'marka' => 'Tesla',
         'model' => '',
         'nr_polisy' => 'POL-123',
+        'rocznik' => '2 026',
+        'przebieg' => '12 000 km',
+        'pojemnosc_silnika' => '1 798 cm3',
+        'wartosc_pojazdu_brutto' => '123 456,78 PLN',
+        'cena_pakietu' => '3 200 PLN',
     ], '{}'));
     parse_str((string) $fake->requests[0]['body'], $body);
 
@@ -94,6 +112,11 @@ test('Daktela module updates ticket policy data through form-encoded custom fiel
     assertSameValue('module-token', $fake->requests[0]['headers']['X-AUTH-TOKEN-OPENAPI']);
     assertSameValue('Tesla', $body['customFields']['marka']);
     assertSameValue('POL-123', $body['customFields']['nr_polisy']);
+    assertSameValue('2026', $body['customFields']['rocznik']);
+    assertSameValue('12000', $body['customFields']['przebieg']);
+    assertSameValue('1798', $body['customFields']['pojemnosc_silnika']);
+    assertSameValue('123456.78', $body['customFields']['wartosc_pojazdu_brutto']);
+    assertSameValue('3200', $body['customFields']['cena_pakietu']);
     assertArrayMissingKey('model', $body['customFields']);
 });
 
@@ -672,7 +695,7 @@ test('Daktela module creates policy CRM record when no matching record exists', 
         ]),
         '/api/v6/crmRecords' => jsonResponse(['result' => ['data' => []]]),
         '/api/v6/crmRecords.json' => jsonResponse(['result' => ['name' => 'record_created']]),
-        '/api/v6/crmRecords/record_created/attachments.json' => existingTestPolicyAttachmentResponse(),
+        '/file/upload.php' => successfulTestPolicyUploadResponse(),
     ]);
     $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
 
@@ -684,17 +707,25 @@ test('Daktela module creates policy CRM record when no matching record exists', 
         'nr_polisy' => 'POL-123',
         'towarzystwo_ubezpieczeniowe' => 'PZU',
         'data_konca_polisy' => '2027-01-31',
+        'cena_pakietu' => '3 200 PLN',
+        'cena_wznowienia' => '3 400 PLN',
+        'oc_cena' => '100 PLN',
+        'ac_cena' => '2 100,50 PLN',
+        'cena_nnw' => '50 PLN',
+        'cena_assistance' => '80 PLN',
+        'gap_cena' => '900 PLN',
+        'cena_przedluzonej_gwarancji' => '1 200 PLN',
     ], '{}'), testPolicyPdf());
-    parse_str((string) $fake->requests[2]['body'], $body);
+    parse_str((string) $fake->requests[3]['body'], $body);
 
     assertSameValue('record_created', $response['result']['name']);
     assertSameValue('PUT', $fake->requests[0]['method']);
     assertSameValue('https://daktela.example/api/v6/tickets/123.json', $fake->requests[0]['url']);
     assertSameValue('GET', $fake->requests[1]['method']);
     assertSameValue('https://daktela.example/api/v6/crmRecords?page=1&pageSize=100&filter%5Bfield%5D=ticket.name&filter%5Boperator%5D=eq&filter%5Bvalue%5D=123', $fake->requests[1]['url']);
-    assertSameValue('POST', $fake->requests[2]['method']);
-    assertSameValue('https://daktela.example/api/v6/crmRecords.json', $fake->requests[2]['url']);
-    assertSameValue('application/x-www-form-urlencoded', $fake->requests[2]['headers']['Content-Type']);
+    assertSameValue('POST', $fake->requests[3]['method']);
+    assertSameValue('https://daktela.example/api/v6/crmRecords.json', $fake->requests[3]['url']);
+    assertSameValue('application/x-www-form-urlencoded', $fake->requests[3]['headers']['Content-Type']);
     assertSameValue('Polisy', $body['title']);
     assertSameValue('type_68227cae0ac91290315441', $body['type']['name']);
     assertSameValue('Polisy', $body['type']['title']);
@@ -710,6 +741,14 @@ test('Daktela module creates policy CRM record when no matching record exists', 
     assertSameValue('POL-123', $body['customFields']['nr_polisy']);
     assertSameValue('PZU', $body['customFields']['towarzystwo_ubezpieczeniowe']);
     assertSameValue('2027-01-31', $body['customFields']['data_konca_polisy']);
+    assertSameValue('3200', $body['customFields']['cena_pakietu']);
+    assertSameValue('3400', $body['customFields']['cena_wznowienia']);
+    assertSameValue('100', $body['customFields']['oc_cena']);
+    assertSameValue('2100.5', $body['customFields']['ac_cena']);
+    assertSameValue('50', $body['customFields']['cena_nnw']);
+    assertSameValue('80', $body['customFields']['cena_assistance']);
+    assertSameValue('900', $body['customFields']['gap_cena']);
+    assertSameValue('1200', $body['customFields']['cena_przedluzonej_gwarancji']);
     assertSameValue('Dealer', $body['customFields']['pochodzenie_polisy']);
     assertArrayMissingKey('status', $body);
 });
@@ -751,17 +790,33 @@ test('Daktela module updates policy CRM record when exactly one matching record 
         'nr_rejestracyjny' => 'WX12345',
         'vin' => 'FORMVIN123',
         'nr_polisy' => 'POL-456',
+        'cena_pakietu' => '3 200 PLN',
+        'cena_wznowienia' => '3 400 PLN',
+        'oc_cena' => '100 PLN',
+        'ac_cena' => '2 100,50 PLN',
+        'cena_nnw' => '50 PLN',
+        'cena_assistance' => '80 PLN',
+        'gap_cena' => '900 PLN',
+        'cena_przedluzonej_gwarancji' => '1 200 PLN',
     ], '{}'), testPolicyPdf());
-    parse_str((string) $fake->requests[2]['body'], $body);
+    parse_str((string) $fake->requests[3]['body'], $body);
 
     assertSameValue('record_policy', $response['result']['name']);
-    assertSameValue('PUT', $fake->requests[2]['method']);
-    assertSameValue('https://daktela.example/api/v6/crmRecords/record_policy.json', $fake->requests[2]['url']);
+    assertSameValue('PUT', $fake->requests[3]['method']);
+    assertSameValue('https://daktela.example/api/v6/crmRecords/record_policy.json', $fake->requests[3]['url']);
     assertSameValue('ABC/123', $body['ticket']['name']);
     assertSameValue('agent_1', $body['user']['name']);
     assertSameValue('contact_1', $body['contact']['name']);
     assertSameValue('FORMVIN123', $body['customFields']['vin']);
     assertSameValue('POL-456', $body['customFields']['nr_polisy']);
+    assertSameValue('3200', $body['customFields']['cena_pakietu']);
+    assertSameValue('3400', $body['customFields']['cena_wznowienia']);
+    assertSameValue('100', $body['customFields']['oc_cena']);
+    assertSameValue('2100.5', $body['customFields']['ac_cena']);
+    assertSameValue('50', $body['customFields']['cena_nnw']);
+    assertSameValue('80', $body['customFields']['cena_assistance']);
+    assertSameValue('900', $body['customFields']['gap_cena']);
+    assertSameValue('1200', $body['customFields']['cena_przedluzonej_gwarancji']);
     assertSameValue('Online', $body['customFields']['pochodzenie_polisy']);
 });
 
@@ -838,7 +893,7 @@ test('Daktela module creates vehicle CRM record when no matching vehicle record 
                 ],
             ]);
         },
-        '/api/v6/crmRecords/record_policy_created/attachments.json' => existingTestPolicyAttachmentResponse(),
+        '/file/upload.php' => successfulTestPolicyUploadResponse(),
     ]);
     $module = new DaktelaModule('https://daktela.example', 'module-token', $fake);
 
@@ -849,10 +904,11 @@ test('Daktela module creates vehicle CRM record when no matching vehicle record 
         'model' => 'Model 3',
         'wersja' => 'Long Range',
         'forma_wlasnosci' => 'Leasing',
-        'rocznik' => '2026',
-        'przebieg' => '1234',
+        'rocznik' => '2 026',
+        'przebieg' => '12 345 km',
         'data_pierwszej_rejestracji' => '2026-01-02',
-        'wartosc_pojazdu_brutto' => '200000 PLN',
+        'pojemnosc_silnika' => '1 798 cm3',
+        'wartosc_pojazdu_brutto' => '200 000,50 PLN',
         'wspolposiadacz' => 'tak',
         'imie_wspolposiadacza' => 'Jan',
         'nazwisko_wspolposiadacza' => 'Kowalski',
@@ -879,6 +935,10 @@ test('Daktela module creates vehicle CRM record when no matching vehicle record 
     assertSameValue('Tesla', $body['customFields']['marka']);
     assertSameValue('Long Range', $body['customFields']['wersja']);
     assertSameValue('Leasing', $body['customFields']['forma_wlasnosci']);
+    assertSameValue('2026', $body['customFields']['rocznik']);
+    assertSameValue('12345', $body['customFields']['przebieg']);
+    assertSameValue('1798', $body['customFields']['pojemnosc_silnika']);
+    assertSameValue('200000.5', $body['customFields']['wartosc_pojazdu_brutto']);
     assertSameValue('Jan', $body['customFields']['imie_wspolposiadacza']);
     assertArrayMissingKey('nr_polisy', $body['customFields']);
     assertArrayMissingKey('status', $body);
@@ -921,6 +981,9 @@ test('Daktela module updates vehicle CRM record when exactly one matching vehicl
         'nr_rejestracyjny' => 'WX12345',
         'vin' => 'TMB123',
         'marka' => 'Skoda',
+        'rocznik' => '2 025',
+        'przebieg' => '98 765 km',
+        'wartosc_pojazdu_brutto' => '150 000 PLN',
     ], '{}'), testPolicyPdf());
     parse_str((string) $fake->requests[6]['body'], $body);
 
@@ -929,6 +992,9 @@ test('Daktela module updates vehicle CRM record when exactly one matching vehicl
     assertSameValue('Pojazdy', $body['title']);
     assertSameValue('Skoda', $body['customFields']['marka']);
     assertSameValue('TMB123', $body['customFields']['vin']);
+    assertSameValue('2025', $body['customFields']['rocznik']);
+    assertSameValue('98765', $body['customFields']['przebieg']);
+    assertSameValue('150000', $body['customFields']['wartosc_pojazdu_brutto']);
 });
 
 
@@ -980,7 +1046,7 @@ test('Daktela module aborts vehicle CRM save when more than one matching vehicle
         assertSameValue(409, $exception->statusCode());
         assertSameValue('multiple_vehicle_crm_records_found', $exception->errorCode());
         assertSameValue(['record_vehicle_registration', 'record_vehicle_vin'], $exception->details()['recordIdentifiers']);
-        assertSameValue(['PUT', 'GET', 'GET', 'PUT', 'GET', 'GET'], array_map(
+        assertSameValue(['PUT', 'GET', 'GET', 'GET', 'PUT', 'GET'], array_map(
             static fn (array $request): string => $request['method'],
             $fake->requests
         ));

@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Ingreen\DaktelaPolicy\DaktelaCommunication;
 
-use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\AttachPolicyPdfToCrmRecord;
-use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\CreatePolicyCrmAttachment;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\CreatePolicyCrmRecord;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\CreateVehicleCrmRecord;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\FindCrmRecordIdentifiersByTitle;
@@ -13,6 +11,7 @@ use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\GetCrmRecordsByTicketId;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\GetTicketByName;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\GetTicketAttachments;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\HasPolicyCrmAttachment;
+use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\PreparePolicyCrmAttachment;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\UpdatePolicyCrmRecord;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\UpdateVehicleCrmRecord;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\Handlers\UpdateTicketPolicyData;
@@ -33,13 +32,13 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
 
     private readonly DaktelaCommunicationService $service;
     private readonly ?AppLogger $logger;
-    private readonly AttachPolicyPdfToCrmRecord $attachPolicyPdfToCrmRecord;
     private readonly CreatePolicyCrmRecord $createPolicyCrmRecord;
     private readonly CreateVehicleCrmRecord $createVehicleCrmRecord;
     private readonly FindCrmRecordIdentifiersByTitle $findCrmRecordIdentifiersByTitle;
     private readonly GetCrmRecordsByTicketId $getCrmRecordsByTicketId;
     private readonly GetTicketByName $getTicketByName;
     private readonly GetTicketAttachments $getTicketAttachments;
+    private readonly PreparePolicyCrmAttachment $preparePolicyCrmAttachment;
     private readonly UpdatePolicyCrmRecord $updatePolicyCrmRecord;
     private readonly UpdateVehicleCrmRecord $updateVehicleCrmRecord;
     private readonly UpdateTicketPolicyData $updateTicketPolicyData;
@@ -55,10 +54,9 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
     ) {
         $this->service = new DaktelaCommunicationService($baseUrl, $apiToken, $requester);
         $this->logger = $logger;
-        $this->attachPolicyPdfToCrmRecord = new AttachPolicyPdfToCrmRecord(
+        $this->preparePolicyCrmAttachment = new PreparePolicyCrmAttachment(
             new HasPolicyCrmAttachment($this->service),
             new UploadPolicyPdf($this->service),
-            new CreatePolicyCrmAttachment($this->service),
             $logger
         );
         $this->getCrmRecordsByTicketId = new GetCrmRecordsByTicketId($this->service, $logger);
@@ -111,10 +109,14 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
             'lookup' => $this->lookupDiagnostics($registrationNumber, $vin),
         ]);
 
-        $policyCrmResponse = $this->savePolicyCrmRecord($ticketId, $data, $ticket, $registrationNumber, $vin);
-        $policyCrmRecordIdentifier = $this->requiredResultName($policyCrmResponse);
-
-        $this->attachPolicyPdfToCrmRecord->execute($ticketId, $policyCrmRecordIdentifier, $policyPdf);
+        $policyCrmResponse = $this->savePolicyCrmRecord(
+            $ticketId,
+            $data,
+            $ticket,
+            $registrationNumber,
+            $vin,
+            $policyPdf
+        );
 
         $this->saveVehicleCrmRecord($ticketId, $data, $ticket, $registrationNumber, $vin);
 
@@ -135,7 +137,8 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
         ExtractedPolicyData $data,
         array $ticket,
         string $registrationNumber,
-        string $vin
+        string $vin,
+        PolicyPdf $policyPdf
     ): array {
         $recordIdentifiers = $this->findPolicyCrmRecordIdentifiers($ticketId, $registrationNumber, $vin);
         $this->logger?->info('Policy CRM record lookup finished.', [
@@ -158,12 +161,13 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
         }
 
         if ($recordIdentifiers === []) {
+            $attachment = $this->preparePolicyCrmAttachment->execute($ticketId, null, $policyPdf);
             $this->logger?->info('Creating policy CRM record.', [
                 'ticketId' => $ticketId,
                 'recordTitle' => self::POLICY_CRM_RECORD_TITLE,
             ]);
 
-            $response = $this->createPolicyCrmRecord->execute($ticketId, $data, $ticket);
+            $response = $this->createPolicyCrmRecord->execute($ticketId, $data, $ticket, $attachment);
             $this->logger?->info('Policy CRM record created.', [
                 'ticketId' => $ticketId,
                 'resultName' => $this->resultName($response),
@@ -177,7 +181,14 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
             'recordIdentifier' => $recordIdentifiers[0],
         ]);
 
-        $response = $this->updatePolicyCrmRecord->execute($recordIdentifiers[0], $ticketId, $data, $ticket);
+        $attachment = $this->preparePolicyCrmAttachment->execute($ticketId, $recordIdentifiers[0], $policyPdf);
+        $response = $this->updatePolicyCrmRecord->execute(
+            $recordIdentifiers[0],
+            $ticketId,
+            $data,
+            $ticket,
+            $attachment
+        );
         $this->logger?->info('Policy CRM record updated.', [
             'ticketId' => $ticketId,
             'recordIdentifier' => $recordIdentifiers[0],
@@ -422,19 +433,5 @@ final class DaktelaModule implements TicketAttachmentProvider, TicketPolicyDataW
         $name = trim((string) $name);
 
         return $name !== '' ? $name : null;
-    }
-
-    /**
-     * @param array<string,mixed> $payload
-     */
-    private function requiredResultName(array $payload): string
-    {
-        $name = $this->resultName($payload);
-
-        if ($name === null) {
-            throw new AppException(502, 'invalid_daktela_response', 'Daktela CRM response did not contain a record identifier.');
-        }
-
-        return $name;
     }
 }

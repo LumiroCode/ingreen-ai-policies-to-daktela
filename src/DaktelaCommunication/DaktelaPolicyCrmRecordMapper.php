@@ -31,11 +31,23 @@ final class DaktelaPolicyCrmRecordMapper
         'data_sprzedazy_wznowienia',
     ];
 
+    private readonly DaktelaNumericValueNormalizer $valueNormalizer;
+
+    public function __construct(?DaktelaNumericValueNormalizer $valueNormalizer = null)
+    {
+        $this->valueNormalizer = $valueNormalizer ?? new DaktelaNumericValueNormalizer();
+    }
+
     /**
      * @param array<string,mixed> $ticket
      * @return array<string,mixed>
      */
-    public function toPolicyCrmPayload(string $ticketId, ExtractedPolicyData $data, array $ticket): array
+    public function toPolicyCrmPayload(
+        string $ticketId,
+        ExtractedPolicyData $data,
+        array $ticket,
+        ?array $attachment = null
+    ): array
     {
         $customFields = $this->customFields($data);
         $origin = $this->ticketCustomField($ticket, 'pochodzenie_polisy');
@@ -64,6 +76,10 @@ final class DaktelaPolicyCrmRecordMapper
             }
         }
 
+        if ($attachment !== null) {
+            $payload['add_files'] = [$attachment];
+        }
+
         return $payload;
     }
 
@@ -75,13 +91,13 @@ final class DaktelaPolicyCrmRecordMapper
         $customFields = [];
 
         foreach (self::CUSTOM_FIELDS as $field) {
-            $value = $data->field($field);
+            $value = $this->valueNormalizer->normalizeForField($field, $data->field($field));
 
-            if ($value === null || trim($value) === '') {
+            if ($value === null) {
                 continue;
             }
 
-            $customFields[$field] = trim($value);
+            $customFields[$field] = $value;
         }
 
         return $customFields;
