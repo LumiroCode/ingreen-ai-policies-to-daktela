@@ -33,12 +33,14 @@ final class FindCrmRecordIdentifiersByTitle
         string $invalidLookupErrorCode,
         string $invalidLookupMessage
     ): array {
-        $registrationNumber = $this->requiredRegistrationNumberValue(
+        $registrationNumber = $this->requiredLookupIdentifier(
             $registrationNumber,
+            'nr_rejestracyjny',
+            'registrationNumber',
             $invalidLookupErrorCode,
             $invalidLookupMessage
         );
-        $vin = $this->requiredLookupValue($vin, 'vin', $invalidLookupErrorCode, $invalidLookupMessage);
+        $vin = $this->requiredLookupIdentifier($vin, 'vin', 'vin', $invalidLookupErrorCode, $invalidLookupMessage);
 
         $recordIdentifiers = [];
 
@@ -53,33 +55,18 @@ final class FindCrmRecordIdentifiersByTitle
         return $recordIdentifiers;
     }
 
-    private function requiredRegistrationNumberValue(
+    private function requiredLookupIdentifier(
         string $value,
+        string $fieldName,
+        string $detailsField,
         string $errorCode,
         string $message
     ): string {
-        $value = $this->valueNormalizer->normalizeForField('nr_rejestracyjny', $value);
+        $value = $this->normalizeLookupIdentifier($fieldName, $value);
 
         if ($value === null || $value === '') {
             throw new AppException(400, $errorCode, $message, [
-                'field' => 'registrationNumber',
-            ]);
-        }
-
-        return $value;
-    }
-
-    private function requiredLookupValue(
-        string $value,
-        string $field,
-        string $errorCode,
-        string $message
-    ): string {
-        $value = trim($value);
-
-        if ($value === '') {
-            throw new AppException(400, $errorCode, $message, [
-                'field' => $field,
+                'field' => $detailsField,
             ]);
         }
 
@@ -114,8 +101,8 @@ final class FindCrmRecordIdentifiersByTitle
             return false;
         }
 
-        return $this->fieldMatches($customFields['nr_rejestracyjny'] ?? null, $registrationNumber, true)
-            || $this->fieldMatches($customFields['vin'] ?? null, $vin);
+        return $this->fieldMatches($customFields['nr_rejestracyjny'] ?? null, $registrationNumber, 'nr_rejestracyjny')
+            || $this->fieldMatches($customFields['vin'] ?? null, $vin, 'vin');
     }
 
     /**
@@ -141,7 +128,7 @@ final class FindCrmRecordIdentifiersByTitle
         return $this->scalarString($type['title'] ?? null);
     }
 
-    private function fieldMatches(mixed $recordValue, string $lookupValue, bool $stripSpaces = false): bool
+    private function fieldMatches(mixed $recordValue, string $lookupValue, string $fieldName): bool
     {
         $recordValue = $this->scalarString($recordValue);
 
@@ -149,17 +136,10 @@ final class FindCrmRecordIdentifiersByTitle
             return false;
         }
 
-        if ($stripSpaces) {
-            $recordValue = $this->normalizeRegistrationNumber($recordValue);
-            $lookupValue = $this->normalizeRegistrationNumber($lookupValue);
+        $recordValue = $this->normalizeLookupIdentifier($fieldName, $recordValue);
+        $lookupValue = $this->normalizeLookupIdentifier($fieldName, $lookupValue);
 
-            return $recordValue !== null && $lookupValue !== null && $recordValue === $lookupValue;
-        } else {
-            $recordValue = $this->normalize($recordValue);
-            $lookupValue = $this->normalize($lookupValue);
-        }
-
-        return $recordValue === $lookupValue;
+        return $recordValue !== null && $lookupValue !== null && $recordValue === $lookupValue;
     }
 
     private function scalarString(mixed $value): ?string
@@ -194,18 +174,15 @@ final class FindCrmRecordIdentifiersByTitle
         return $value !== '' ? $value : null;
     }
 
-    private function normalize(string $value): string
+    private function normalizeLookupIdentifier(string $fieldName, mixed $value): ?string
     {
-        $value = trim($value);
+        $value = $this->valueNormalizer->normalizeForField($fieldName, $value);
+
+        if ($value === null) {
+            return null;
+        }
 
         return function_exists('mb_strtoupper') ? mb_strtoupper($value, 'UTF-8') : strtoupper($value);
-    }
-
-    private function normalizeRegistrationNumber(string $value): ?string
-    {
-        $value = $this->valueNormalizer->normalizeForField('nr_rejestracyjny', $value);
-
-        return $value === null ? null : $this->normalize($value);
     }
 
     /**

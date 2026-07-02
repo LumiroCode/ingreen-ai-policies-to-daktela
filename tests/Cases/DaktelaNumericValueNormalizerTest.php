@@ -12,6 +12,7 @@ test('Daktela outbound value normalizer strips spaces from registration numbers 
 
     assertSameValue('wx12345', $normalizer->normalizeForField('nr_rejestracyjny', ' wx 12345 '));
     assertSameValue('AbC-12', $normalizer->normalizeForField('nr_rejestracyjny', "  AbC - 12  "));
+    assertSameValue('tMb123', $normalizer->normalizeForField('vin', ' tMb 123 '));
 });
 
 test('Daktela outbound value normalizer strips spaces and units from numeric fields', function (): void {

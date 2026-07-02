@@ -13,6 +13,7 @@ final class DaktelaNumericValueNormalizer
      */
     private const WHITESPACE_STRIPPED_FIELDS = [
         'nr_rejestracyjny',
+        'vin',
     ];
 
     /**
