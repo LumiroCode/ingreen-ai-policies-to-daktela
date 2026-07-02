@@ -11,6 +11,7 @@ require_once __DIR__ . '/../Fakes/FakePolicyDataExtractor.php';
 require_once __DIR__ . '/../Fakes/FakeClaudeMessagesClient.php';
 
 use Ingreen\DaktelaPolicy\Config\AppConfig;
+use Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyConfirmationForm;
 use Ingreen\DaktelaPolicy\WebhookAccessGuard;
 
@@ -19,6 +20,15 @@ test('Utility tab signature matches helper formula with seconds', function (): v
     $guard = new WebhookAccessGuard($config, tabSignatureVerifier());
 
     assertSameValue('89666-30820-47545', $guard->makeUtilityTabSig('1782315045', '123'));
+});
+
+
+test('policy date helper normalizes dd.mm.yyyy values for date inputs and display', function (): void {
+    assertTrueValue(ExtractedPolicyData::isDateField('data_konca_polisy'));
+    assertSameValue('date', ExtractedPolicyData::fieldInputType('data_konca_polisy'));
+    assertSameValue('2024-01-05', ExtractedPolicyData::fieldInputValue('data_konca_polisy', '05.01.2024'));
+    assertSameValue('05.01.2024', ExtractedPolicyData::fieldDisplayValue('data_konca_polisy', '2024-01-05'));
+    assertSameValue('text', ExtractedPolicyData::fieldInputType('marka'));
 });
 
 

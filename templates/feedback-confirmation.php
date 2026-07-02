@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData;
+
 /**
- * @var \Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData|null $extractedData
+ * @var ExtractedPolicyData|null $extractedData
  * @var string $accessToken
  * @var string|null $selectedAttachmentIndex
  * @var array<string,bool> $selectedLockedFields
@@ -16,21 +18,25 @@ declare(strict_types=1);
 $policyRows = [];
 $policyGroups = [];
 
-if ($extractedData instanceof \Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData) {
-    foreach (\Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData::FIELDS as $field) {
+if ($extractedData instanceof ExtractedPolicyData) {
+    foreach (ExtractedPolicyData::FIELDS as $field) {
+        $value = $extractedData->field($field);
+
         $policyRows[$field] = [
-            'label' => \Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData::LABELS[$field],
-            'value' => $extractedData->field($field),
+            'label' => ExtractedPolicyData::LABELS[$field],
+            'value' => $value,
+            'inputValue' => ExtractedPolicyData::fieldInputValue($field, $value),
+            'inputType' => ExtractedPolicyData::fieldInputType($field),
         ];
     }
 
     $vehicleRows = array_intersect_key(
         $policyRows,
-        array_fill_keys(\Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData::VEHICLE_FIELDS, true)
+        array_fill_keys(ExtractedPolicyData::VEHICLE_FIELDS, true)
     );
     $insuranceRows = array_intersect_key(
         $policyRows,
-        array_fill_keys(\Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData::POLICY_FIELDS, true)
+        array_fill_keys(ExtractedPolicyData::POLICY_FIELDS, true)
     );
 
     $policyGroups = [
@@ -205,6 +211,8 @@ $confirmationAction = '?' . http_build_query([
                                 $fieldId = 'policy-data-' . $key;
                                 $lockId = 'policy-lock-' . $key;
                                 $ticketValue = $ticketPolicyValues[$key] ?? null;
+                                $ticketInputValue = ExtractedPolicyData::fieldInputValue($key, $ticketValue);
+                                $ticketDisplayValue = ExtractedPolicyData::fieldDisplayValue($key, $ticketValue);
                                 $descriptionId = 'policy-description-' . $key;
                             ?>
                             <div class="policy-field<?= $locked ? ' locked' : '' ?>">
@@ -241,9 +249,10 @@ $confirmationAction = '?' . http_build_query([
                                     <input
                                         id="<?= htmlspecialchars($fieldId, ENT_QUOTES, 'UTF-8') ?>"
                                         class="policy-input"
-                                        type="text"
+                                        type="<?= htmlspecialchars((string) ($row['inputType'] ?? 'text'), ENT_QUOTES, 'UTF-8') ?>"
+                                        <?= ($row['inputType'] ?? 'text') === 'date' ? 'lang="pl-PL"' : '' ?>
                                         name="policy_data[<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>]"
-                                        value="<?= htmlspecialchars((string) ($row['value'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                        value="<?= htmlspecialchars((string) ($row['inputValue'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                         <?= in_array($key, ['wartosc_pojazdu_brutto', 'wartosc_pojazdu_netto'], true) ? 'aria-describedby="' . htmlspecialchars($descriptionId, ENT_QUOTES, 'UTF-8') . '"' : '' ?>
                                         <?= $locked ? 'readonly' : '' ?>
                                     >
@@ -251,10 +260,10 @@ $confirmationAction = '?' . http_build_query([
                                         <button
                                             class="policy-input-action policy-restore-ai-value"
                                             type="button"
-                                            <?= $row['value'] ? 'data-policy-ai-value="' . htmlspecialchars((string) ($row['value'] ?? ''), ENT_QUOTES, 'UTF-8') . '"' : '' ?>
+                                            <?= trim((string) ($row['inputValue'] ?? '')) !== '' ? 'data-policy-ai-value="' . htmlspecialchars((string) ($row['inputValue'] ?? ''), ENT_QUOTES, 'UTF-8') . '"' : '' ?>
                                             title="Przywróć wartość odczytaną przez AI"
                                             aria-label="Przywróć wartość odczytaną przez AI dla pola <?= htmlspecialchars($row['label'], ENT_QUOTES, 'UTF-8') ?>"
-                                            <?= $row['value'] ? '' : 'disabled' ?>
+                                            <?= trim((string) ($row['inputValue'] ?? '')) !== '' ? '' : 'disabled' ?>
                                         >AI</button>
                                         <button
                                             class="policy-input-action policy-clear-value"
@@ -268,12 +277,13 @@ $confirmationAction = '?' . http_build_query([
                                     <div class="policy-system-value">
                                         <span class="policy-system-value-text">
                                             W systemie:
-                                            <span><?= htmlspecialchars($ticketValue, ENT_QUOTES, 'UTF-8') ?></span>
+                                            <span><?= htmlspecialchars($ticketDisplayValue, ENT_QUOTES, 'UTF-8') ?></span>
                                         </span>
                                         <button
                                             class="button secondary policy-apply-system-value"
                                             type="button"
-                                            data-policy-apply-value="<?= htmlspecialchars($ticketValue, ENT_QUOTES, 'UTF-8') ?>"
+                                            <?= trim($ticketInputValue) !== '' ? 'data-policy-apply-value="' . htmlspecialchars($ticketInputValue, ENT_QUOTES, 'UTF-8') . '"' : '' ?>
+                                            <?= trim($ticketInputValue) !== '' ? '' : 'disabled' ?>
                                         >← użyj z systemu</button>
                                     </div>
                                 <?php endif; ?>

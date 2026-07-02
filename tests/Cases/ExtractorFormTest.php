@@ -13,6 +13,7 @@ require_once __DIR__ . '/../Fakes/FakeClaudeMessagesClient.php';
 use Ingreen\DaktelaPolicy\WebhookApp;
 use Ingreen\DaktelaPolicy\Config\AppConfig;
 use Ingreen\DaktelaPolicy\DaktelaCommunication\DaktelaModule;
+use Ingreen\DaktelaPolicy\PolicyExtraction\ExtractedPolicyData;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataCache;
 use Ingreen\DaktelaPolicy\PolicyExtraction\PolicyDataParser;
 use Ingreen\DaktelaPolicy\PolicyExtraction\Claude\ClaudePolicyDataExtractor;
@@ -80,6 +81,51 @@ test('policy confirmation form shows ticket custom field value without replacing
     );
     assertTrueValue(!str_contains($download['body'], 'data-policy-apply-value="Model 3"'));
     assertTrueValue(!str_contains($download['body'], 'data-policy-apply-value="204000 PLN"'));
+});
+
+test('policy confirmation form renders date fields as date inputs and formats system values', function (): void {
+    $dir = tempDir();
+    $dateValue = '2024-01-05';
+    $dateFields = array_fill_keys(ExtractedPolicyData::DATE_FIELDS, $dateValue);
+    $extractorData = array_merge([
+        'marka' => 'LLM Tesla',
+        'model' => 'Model 3',
+        'nr_polisy' => 'POL-123',
+    ], $dateFields);
+
+    $fake = new FakeDaktela([
+        '/api/v6/tickets/123' => jsonResponse([
+            'result' => [
+                'name' => '123',
+                'title' => 'Policy ticket',
+                'has_attachment' => true,
+                'attachments' => [
+                    ['file' => '/files/scan.pdf', 'title' => 'scan.pdf', 'type' => 'application/pdf'],
+                ],
+                'customFields' => $dateFields,
+            ],
+        ]),
+        '/api/v6/tickets/123/activities' => jsonResponse(['result' => ['data' => []]]),
+        '/files/scan.pdf' => pdfResponse(),
+    ]);
+    $extractor = new FakePolicyDataExtractor(
+        ExtractedPolicyData::fromFields($extractorData, '{"marka":"LLM Tesla","data_nabycia":"2024-01-05"}')
+    );
+    $app = app($fake, $dir, extractor: $extractor);
+
+    $download = signedEntryRequest($app, '123', '0');
+
+    assertSameValue(200, $download['status']);
+    assertSameValue(count(ExtractedPolicyData::DATE_FIELDS), substr_count($download['body'], 'type="date"'));
+    assertSameValue(count(ExtractedPolicyData::DATE_FIELDS), substr_count($download['body'], 'lang="pl-PL"'));
+    assertSameValue(count(ExtractedPolicyData::DATE_FIELDS), substr_count($download['body'], 'data-policy-ai-value="' . $dateValue . '"'));
+    assertSameValue(count(ExtractedPolicyData::DATE_FIELDS), substr_count($download['body'], 'data-policy-apply-value="' . $dateValue . '"'));
+    assertSameValue(count(ExtractedPolicyData::DATE_FIELDS), substr_count($download['body'], '05.01.2024'));
+    assertTrueValue(
+        preg_match('/type="date"[^>]*lang="pl-PL"[^>]*name="policy_data\[data_nabycia\]"[^>]*value="2024-01-05"/s', $download['body']) === 1,
+        'Expected date fields to render as date inputs with ISO values.'
+    );
+    assertTrueValue(str_contains($download['body'], 'W systemie:'));
 });
 
 

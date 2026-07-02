@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Ingreen\DaktelaPolicy\PolicyExtraction;
 
+use DateTimeImmutable;
+
 final class ExtractedPolicyData
 {
     public const FIELDS = [
@@ -44,6 +46,15 @@ final class ExtractedPolicyData
         'gap_cena',
         'cena_przedluzonej_gwarancji',
         'rodzaj_polisy',
+        'data_sprzedazy_lubezpieczenia',
+        'data_sprzedazy_wznowienia',
+    ];
+
+    public const DATE_FIELDS = [
+        'data_nabycia',
+        'data_pierwszej_rejestracji',
+        'planowana_data_rejestracji',
+        'data_konca_polisy',
         'data_sprzedazy_lubezpieczenia',
         'data_sprzedazy_wznowienia',
     ];
@@ -181,6 +192,50 @@ final class ExtractedPolicyData
         return $this->fields[$field] ?? null;
     }
 
+    public static function isDateField(string $field): bool
+    {
+        return in_array($field, self::DATE_FIELDS, true);
+    }
+
+    public static function fieldInputType(string $field): string
+    {
+        return self::isDateField($field) ? 'date' : 'text';
+    }
+
+    public static function fieldInputValue(string $field, ?string $value): string
+    {
+        $value = self::normalizedScalarValue($value);
+
+        if ($value === null) {
+            return '';
+        }
+
+        if (!self::isDateField($field)) {
+            return $value;
+        }
+
+        $date = self::dateValue($value);
+
+        return $date?->format('Y-m-d') ?? '';
+    }
+
+    public static function fieldDisplayValue(string $field, ?string $value): string
+    {
+        $value = self::normalizedScalarValue($value);
+
+        if ($value === null) {
+            return '';
+        }
+
+        if (!self::isDateField($field)) {
+            return $value;
+        }
+
+        $date = self::dateValue($value);
+
+        return $date?->format('d.m.Y') ?? $value;
+    }
+
     /**
      * @param array<string,string|null> $fields
      * @return array<string,string|null>
@@ -194,5 +249,44 @@ final class ExtractedPolicyData
         }
 
         return $normalized;
+    }
+
+    private static function normalizedScalarValue(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim($value);
+
+        return $value !== '' ? $value : null;
+    }
+
+    private static function dateValue(string $value): ?DateTimeImmutable
+    {
+        $value = trim($value);
+        $value = preg_split('/[T\s]/', $value, 2)[0] ?? $value;
+
+        if (preg_match('/^(?<year>\d{4})[-\/.](?<month>\d{1,2})[-\/.](?<day>\d{1,2})$/', $value, $matches) === 1) {
+            $year = (int) $matches['year'];
+            $month = (int) $matches['month'];
+            $day = (int) $matches['day'];
+
+            if (checkdate($month, $day, $year)) {
+                return new DateTimeImmutable(sprintf('%04d-%02d-%02d', $year, $month, $day));
+            }
+        }
+
+        if (preg_match('/^(?<day>\d{1,2})[-\/.](?<month>\d{1,2})[-\/.](?<year>\d{4})$/', $value, $matches) === 1) {
+            $year = (int) $matches['year'];
+            $month = (int) $matches['month'];
+            $day = (int) $matches['day'];
+
+            if (checkdate($month, $day, $year)) {
+                return new DateTimeImmutable(sprintf('%04d-%02d-%02d', $year, $month, $day));
+            }
+        }
+
+        return null;
     }
 }
